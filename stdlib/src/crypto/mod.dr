@@ -1,0 +1,306 @@
+/// std.crypto — cryptographic primitives.
+///
+/// All operations in this module require a `CryptoCap` capability token.
+/// This enforces that cryptographic operations are intentional and auditable.
+///
+/// # Security notes
+/// - Comparison of MACs/digests must use `constant_time_eq` to prevent
+///   timing attacks.
+/// - Random bytes come from the OS CSPRNG (`/dev/urandom` on Unix,
+///   `BCryptGenRandom` on Windows); they are never seeded with system time.
+/// - Secret keys are zeroed from memory when dropped.
+///
+/// EXPERIMENTAL: this module is not runtime-complete yet. APIs backed by
+/// `todo!()` are intentionally unstable and must not be treated as production-ready.
+
+import { Result, Option, String } from "std/core";
+import { Vec } from "std/collections";
+
+// ─── Capability ───────────────────────────────────────────────────────────────
+
+/// Capability token that gates all cryptographic operations.
+/// Only the runtime can produce a `CryptoCap`; user code receives one
+/// through the program's capability tree.
+export struct CryptoCap {
+    _priv: (),
+}
+
+// ─── Constant-time comparison ─────────────────────────────────────────────────
+
+/// Compare two byte slices in constant time (prevents timing attacks).
+/// Returns `true` if and only if the slices are equal in length and content.
+export fun constant_time_eq(a: &[u8], b: &[u8]): bool {
+    if a.len() != b.len() { return false; }
+    const diff = 0u8;
+    for i in 0..a.len() {
+        diff |= a[i] ^ b[i];
+    }
+    diff == 0
+}
+
+// ─── Random bytes ─────────────────────────────────────────────────────────────
+
+/// Fill a mutable byte slice with cryptographically secure random bytes.
+/// Uses the OS CSPRNG.
+export fun random_bytes(_cap: &CryptoCap, buf: &mut [u8]) {
+    todo!()
+}
+
+/// Allocate and return `n` cryptographically secure random bytes.
+export fun random_vec(_cap: &CryptoCap, n: usize): Vec<u8> {
+    todo!()
+}
+
+/// Generate a random u64 from the OS CSPRNG.
+export fun random_u64(_cap: &CryptoCap): u64 {
+    todo!()
+}
+
+// ─── Hashing ──────────────────────────────────────────────────────────────────
+
+/// The SHA-256 digest algorithm (32-byte output).
+export struct Sha256 {
+    _state: [u32; 8],
+    _buf: [u8; 64],
+    _buf_len: usize,
+    _total: u64,
+}
+
+extend Sha256 {
+    export fun new(): Sha256 {
+        todo!()
+    }
+
+    export fun update(mut self, data: &[u8]): Sha256 {
+        todo!()
+    }
+
+    export fun finalize(self): [u8; 32] {
+        todo!()
+    }
+}
+
+/// Compute SHA-256 of `data` in one shot.
+export fun sha256(data: &[u8]): [u8; 32] {
+    Sha256::new().update(data).finalize()
+}
+
+/// The SHA-512 digest algorithm (64-byte output).
+export struct Sha512 {
+    _state: [u64; 8],
+    _buf: [u8; 128],
+    _buf_len: usize,
+    _total: u128,
+}
+
+extend Sha512 {
+    export fun new(): Sha512 { todo!() }
+    export fun update(mut self, data: &[u8]): Sha512 { todo!() }
+    export fun finalize(self): [u8; 64] { todo!() }
+}
+
+/// Compute SHA-512 of `data` in one shot.
+export fun sha512(data: &[u8]): [u8; 64] {
+    Sha512::new().update(data).finalize()
+}
+
+/// The BLAKE3 hash function (32-byte output, extremely fast).
+export struct Blake3 {
+    _inner: [u8; 64],
+}
+
+extend Blake3 {
+    export fun new(): Blake3 { todo!() }
+    export fun update(mut self, data: &[u8]): Blake3 { todo!() }
+    export fun finalize(self): [u8; 32] { todo!() }
+    /// Produce an output digest of arbitrary length.
+    export fun finalize_xof(self, len: usize): Vec<u8> { todo!() }
+}
+
+/// Compute BLAKE3 of `data` in one shot.
+export fun blake3(data: &[u8]): [u8; 32] {
+    Blake3::new().update(data).finalize()
+}
+
+// ─── HMAC ─────────────────────────────────────────────────────────────────────
+
+/// HMAC-SHA-256 message authentication code (32-byte tag).
+export struct HmacSha256 {
+    _ipad: Sha256,
+    _opad_key: [u8; 64],
+}
+
+extend HmacSha256 {
+    export fun new(_cap: &CryptoCap, key: &[u8]): HmacSha256 { todo!() }
+    export fun update(mut self, data: &[u8]): HmacSha256 { todo!() }
+    export fun finalize(self): [u8; 32] { todo!() }
+
+    /// Verify a MAC tag in constant time.
+    export fun verify(self, tag: &[u8; 32]): bool {
+        constant_time_eq(&self.finalize(), tag)
+    }
+}
+
+/// Compute HMAC-SHA-256 in one shot.
+export fun hmac_sha256(_cap: &CryptoCap, key: &[u8], data: &[u8]): [u8; 32] {
+    HmacSha256::new(_cap, key).update(data).finalize()
+}
+
+// ─── Key derivation ───────────────────────────────────────────────────────────
+
+/// HKDF (RFC 5869) using SHA-256.
+///
+/// - `ikm`: input keying material
+/// - `salt`: optional salt (use an empty slice to fall back to spec default)
+/// - `info`: context/application-specific information
+/// - `out_len`: desired output key length in bytes (max 255 × 32 = 8160)
+export fun hkdf_sha256(
+    _cap: &CryptoCap,
+    ikm: &[u8],
+    salt: &[u8],
+    info: &[u8],
+    out_len: usize,
+): Result<Vec<u8>, String> {
+    todo!()
+}
+
+/// PBKDF2-HMAC-SHA-256 password hashing.
+///
+/// - `password`: the password bytes
+/// - `salt`: a random salt (at least 16 bytes recommended)
+/// - `iterations`: work factor (600 000 recommended as of 2024)
+/// - `out_len`: desired output length in bytes
+export fun pbkdf2_sha256(
+    _cap: &CryptoCap,
+    password: &[u8],
+    salt: &[u8],
+    iterations: u32,
+    out_len: usize,
+): Vec<u8> {
+    todo!()
+}
+
+// ─── Symmetric encryption (AES-GCM) ──────────────────────────────────────────
+
+/// A 256-bit AES-GCM secret key. Zeroed from memory on drop.
+export struct Aes256GcmKey {
+    _bytes: [u8; 32],
+}
+
+extend Aes256GcmKey {
+    /// Generate a fresh random key.
+    export fun generate(_cap: &CryptoCap): Aes256GcmKey { todo!() }
+
+    /// Wrap an existing 32-byte key. Returns `Err` if the slice is not exactly
+    /// 32 bytes.
+    export fun from_bytes(_cap: &CryptoCap, bytes: &[u8]): Result<Aes256GcmKey, String> {
+        if bytes.len() != 32 {
+            return Result::Err(String::from("AES-256-GCM key must be 32 bytes"));
+        }
+        todo!()
+    }
+}
+
+/// A 96-bit (12-byte) nonce for AES-GCM. Must be unique per (key, message) pair.
+export struct Nonce {
+    _bytes: [u8; 12],
+}
+
+extend Nonce {
+    /// Generate a random nonce.
+    export fun random(_cap: &CryptoCap): Nonce { todo!() }
+
+    /// Construct from a fixed 12-byte array.
+    export fun from_bytes(bytes: [u8; 12]): Nonce { Nonce { _bytes: bytes } }
+}
+
+/// Encrypt `plaintext` with AES-256-GCM.
+///
+/// - `aad`: additional authenticated data (not encrypted, but integrity-protected).
+///   Pass an empty slice if not needed.
+/// - Returns ciphertext with the 16-byte authentication tag appended.
+export fun aes256_gcm_encrypt(
+    _cap: &CryptoCap,
+    key: &Aes256GcmKey,
+    nonce: &Nonce,
+    plaintext: &[u8],
+    aad: &[u8],
+): Vec<u8> {
+    todo!()
+}
+
+/// Decrypt and verify `ciphertext` (with appended 16-byte tag) using AES-256-GCM.
+///
+/// Returns `Err` if the authentication tag is invalid (ciphertext was tampered).
+export fun aes256_gcm_decrypt(
+    _cap: &CryptoCap,
+    key: &Aes256GcmKey,
+    nonce: &Nonce,
+    ciphertext: &[u8],
+    aad: &[u8],
+): Result<Vec<u8>, String> {
+    todo!()
+}
+
+// ─── Hex encoding helpers ─────────────────────────────────────────────────────
+
+const HEX_CHARS: &[u8; 16] = b"0123456789abcdef";
+
+/// Encode a byte slice as a lowercase hex string.
+export fun hex_encode(bytes: &[u8]): String {
+    const s = String::new();
+    for b in bytes {
+        s.push(HEX_CHARS[(b >> 4) as usize] as char);
+        s.push(HEX_CHARS[(b & 0x0f) as usize] as char);
+    }
+    s
+}
+
+/// Decode a lowercase or uppercase hex string into bytes.
+/// Returns `Err` if the string has an odd length or invalid hex characters.
+export fun hex_decode(s: &str): Result<Vec<u8>, String> {
+    if s.len() % 2 != 0 {
+        return Result::Err(String::from("hex string has odd length"));
+    }
+    const bytes = s.as_bytes();
+    const out = Vec::new();
+    const i = 0;
+    while i < bytes.len() {
+        const hi = hex_nibble(bytes[i])?;
+        const lo = hex_nibble(bytes[i + 1])?;
+        out.push((hi << 4) | lo);
+        i += 2;
+    }
+    Result::Ok(out)
+}
+
+fun hex_nibble(b: u8): Result<u8, String> {
+    match b {
+        b'0'..=b'9' => Result::Ok(b - b'0'),
+        b'a'..=b'f' => Result::Ok(b - b'a' + 10),
+        b'A'..=b'F' => Result::Ok(b - b'A' + 10),
+        _ => Result::Err(String::from("invalid hex character")),
+    }
+}
+
+// ─── Base64 helpers ───────────────────────────────────────────────────────────
+
+/// Encode bytes as standard (RFC 4648) Base64 with `=` padding.
+export fun base64_encode(bytes: &[u8]): String {
+    todo!()
+}
+
+/// Encode bytes as URL-safe (RFC 4648 §5) Base64 with `=` padding.
+export fun base64_url_encode(bytes: &[u8]): String {
+    todo!()
+}
+
+/// Decode standard Base64. Returns `Err` on invalid characters or padding.
+export fun base64_decode(s: &str): Result<Vec<u8>, String> {
+    todo!()
+}
+
+/// Decode URL-safe Base64. Returns `Err` on invalid characters or padding.
+export fun base64_url_decode(s: &str): Result<Vec<u8>, String> {
+    todo!()
+}

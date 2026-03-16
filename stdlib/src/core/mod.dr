@@ -1,0 +1,386 @@
+/// std.core — core primitives for the Daram standard library.
+///
+/// This module is implicitly available in every Daram program.
+/// It provides the foundational types and traits.
+
+// ─── Option ───────────────────────────────────────────────────────────────────
+
+/// Represents an optional value: either `Some(T)` or `None`.
+///
+/// `Option<T>` is Daram's replacement for nullable pointers.
+/// The absence of a value must always be explicitly handled.
+export enum Option<T> {
+    Some(T),
+    None,
+}
+
+extend<T> Option<T> {
+    /// Return `true` if this is `Some`.
+    export fun is_some(self): bool {
+        match self {
+            Option::Some(_) => true,
+            Option::None => false,
+        }
+    }
+
+    /// Return `true` if this is `None`.
+    export fun is_none(self): bool {
+        !self.is_some()
+    }
+
+    /// Unwrap the value, panicking with `msg` if `None`.
+    export fun expect(self, msg: &str): T {
+        match self {
+            Option::Some(v) => v,
+            Option::None => panic(msg),
+        }
+    }
+
+    /// Unwrap the value, panicking if `None`.
+    export fun unwrap(self): T {
+        self.expect("called `Option::unwrap()` on a `None` value")
+    }
+
+    /// Return the contained value or `default`.
+    export fun unwrap_or(self, default: T): T {
+        match self {
+            Option::Some(v) => v,
+            Option::None => default,
+        }
+    }
+
+    /// Map the contained value with `f`, leaving `None` unchanged.
+    export fun map<U>(self, f: fun(T): U): Option<U> {
+        match self {
+            Option::Some(v) => Option::Some(f(v)),
+            Option::None => Option::None,
+        }
+    }
+
+    /// Return `None` if `None`, else call `f` with the wrapped value and return the result.
+    export fun and_then<U>(self, f: fun(T): Option<U>): Option<U> {
+        match self {
+            Option::Some(v) => f(v),
+            Option::None => Option::None,
+        }
+    }
+
+    /// Return the option if it is `Some`, otherwise return `other`.
+    export fun or(self, other: Option<T>): Option<T> {
+        match self {
+            Option::Some(_) => self,
+            Option::None => other,
+        }
+    }
+}
+
+// ─── Result ───────────────────────────────────────────────────────────────────
+
+/// Represents success (`Ok(T)`) or failure (`Err(E)`).
+///
+/// Functions that can fail should return `Result<T, E>`.
+/// Use the `?` operator to propagate errors automatically.
+export enum Result<T, E> {
+    Ok(T),
+    Err(E),
+}
+
+extend<T, E> Result<T, E> {
+    export fun is_ok(self): bool {
+        match self {
+            Result::Ok(_) => true,
+            Result::Err(_) => false,
+        }
+    }
+
+    export fun is_err(self): bool {
+        !self.is_ok()
+    }
+
+    export fun expect(self, msg: &str): T {
+        match self {
+            Result::Ok(v) => v,
+            Result::Err(_) => panic(msg),
+        }
+    }
+
+    export fun unwrap(self): T {
+        self.expect("called `Result::unwrap()` on an `Err` value")
+    }
+
+    export fun map<U>(self, f: fun(T): U): Result<U, E> {
+        match self {
+            Result::Ok(v) => Result::Ok(f(v)),
+            Result::Err(e) => Result::Err(e),
+        }
+    }
+
+    export fun map_err<F>(self, f: fun(E): F): Result<T, F> {
+        match self {
+            Result::Ok(v) => Result::Ok(v),
+            Result::Err(e) => Result::Err(f(e)),
+        }
+    }
+
+    export fun and_then<U>(self, f: fun(T): Result<U, E>): Result<U, E> {
+        match self {
+            Result::Ok(v) => f(v),
+            Result::Err(e) => Result::Err(e),
+        }
+    }
+
+    export fun ok(self): Option<T> {
+        match self {
+            Result::Ok(v) => Option::Some(v),
+            Result::Err(_) => Option::None,
+        }
+    }
+
+    export fun err(self): Option<E> {
+        match self {
+            Result::Ok(_) => Option::None,
+            Result::Err(e) => Option::Some(e),
+        }
+    }
+}
+
+// ─── String ───────────────────────────────────────────────────────────────────
+
+/// A heap-allocated, UTF-8 encoded string.
+export struct String {
+    // Internal representation — not directly accessible.
+    _bytes: [u8],
+}
+
+export struct StringSplit;
+
+extend String {
+    /// Create an empty string.
+    export fun new(): String {
+        __builtin_string_new()
+    }
+
+    /// Return the length of the string in bytes.
+    export fun len(self): usize {
+        __builtin_string_len(self)
+    }
+
+    /// Return `true` if the string is empty.
+    export fun is_empty(self): bool {
+        self.len() == 0
+    }
+
+    /// Return a string slice (`&str`) over the entire string.
+    export fun as_str(self): &str {
+        __builtin_string_as_str(self)
+    }
+
+    /// Push a char onto the end of the string.
+    export fun push(mut self, c: char) {
+        __builtin_string_push(self, c)
+    }
+
+    /// Push a string slice onto the end.
+    export fun push_str(mut self, s: &str) {
+        __builtin_string_push_str(self, s)
+    }
+
+    /// Return `true` if this string contains `needle`.
+    export fun contains(self, needle: &str): bool {
+        __builtin_string_contains(self, needle)
+    }
+
+    /// Split by `delimiter` and return an iterator of slices.
+    export fun split(self, delimiter: &str): std::core::StringSplit {
+        __builtin_string_split(self, delimiter)
+    }
+
+    /// Trim leading and trailing whitespace.
+    export fun trim(self): &str {
+        __builtin_string_trim(self)
+    }
+
+    /// Return the string repeated `times` times.
+    export fun repeat(self, times: i32): String {
+        __builtin_string_repeat(self, times)
+    }
+
+    /// Return a new string with all `needle` matches replaced by `replacement`.
+    export fun replace(self, needle: &str, replacement: &str): String {
+        __builtin_string_replace(self, needle, replacement)
+    }
+}
+
+extend String implements From<&str> {
+    fun from(value: &str): Self {
+        const text = String::new();
+        text.push_str(value);
+        text
+    }
+}
+
+extend StringSplit implements Copy {}
+
+extend StringSplit {
+    export fun next(mut self): Option<String> {
+        __builtin_string_split_next(self)
+    }
+
+    export fun count(self): usize {
+        __builtin_string_split_count(self)
+    }
+}
+
+// ─── Panic ────────────────────────────────────────────────────────────────────
+
+/// Unconditionally panic with the given message.
+/// Panics terminate the current thread and unwind the stack.
+export fun panic(msg: &str): ! {
+    // Native: call the platform panic handler.
+    unsafe {
+        __builtin_panic(msg)
+    }
+}
+
+// ─── Core abilities ───────────────────────────────────────────────────────────
+
+/// Types that can be copied by value without consuming the source.
+/// Primitive types (bool, i32, f64, char, etc.) implement `Copy`.
+export ability Copy {}
+
+/// Types that can produce a new value from an existing one.
+export ability Clone {
+    fun clone(self): Self;
+}
+
+/// Types that have a predictable destructor when they go out of scope.
+export ability Drop {
+    fun drop(mut self);
+}
+
+/// Types that can be safely sent across thread boundaries.
+export ability Send {}
+
+/// Types whose references can be safely shared across threads.
+export ability Sync {}
+
+/// Types that can be serialised to persistent storage.
+export ability Persist {}
+
+// ─── Comparison abilities ─────────────────────────────────────────────────────
+
+export ability PartialEq {
+    fun eq(self, other: &Self): bool;
+
+    fun ne(self, other: &Self): bool {
+        !self.eq(other)
+    }
+}
+
+export ability Eq: PartialEq {}
+
+export ability PartialOrd: PartialEq {
+    fun partial_cmp(self, other: &Self): Option<Ordering>;
+}
+
+export ability Ord: Eq + PartialOrd {
+    fun cmp(self, other: &Self): Ordering;
+}
+
+export enum Ordering {
+    Less,
+    Equal,
+    Greater,
+}
+
+// ─── Hash ─────────────────────────────────────────────────────────────────────
+
+export ability Hash {
+    fun hash(self, state: &mut Hasher);
+}
+
+export interface Hasher {
+    fun write(mut self, bytes: &[u8]);
+    fun finish(self): u64;
+}
+
+// ─── Display and Debug ────────────────────────────────────────────────────────
+
+/// Human-readable display formatting.
+export ability Display {
+    fun fmt(self, f: &mut std::fmt::Formatter): Result<(), std::fmt::Error>;
+}
+
+/// Debug formatting for development and diagnostics.
+export ability Debug {
+    fun fmt(self, f: &mut std::fmt::Formatter): Result<(), std::fmt::Error>;
+}
+
+// ─── Default ──────────────────────────────────────────────────────────────────
+
+/// Types with a sensible default value.
+export ability Default {
+    fun default(): Self;
+}
+
+// ─── Conversion abilities ─────────────────────────────────────────────────────
+
+/// Cheap, infallible conversion from `T`.
+export ability From<T> {
+    fun from(value: T): Self;
+}
+
+/// Cheap, infallible conversion into `T`.
+/// Implemented automatically for any `From<T>`.
+export ability Into<T> {
+    fun into(self): T;
+}
+
+/// Fallible conversion from `T`.
+export ability TryFrom<T> {
+    type Error;
+    fun try_from(value: T): Result<Self, Self::Error>;
+}
+
+/// Fallible conversion into `T`.
+export ability TryInto<T> {
+    type Error;
+    fun try_into(self): Result<T, Self::Error>;
+}
+
+// ─── Iterator ─────────────────────────────────────────────────────────────────
+
+/// An interface for types that produce a sequence of values.
+export ability Iterator {
+    type Item;
+
+    fun next(mut self): Option<Self::Item>;
+}
+
+export struct Map<T>;
+
+extend<T> Map<T> {
+    export fun next(mut self): Option<T> {
+        __builtin_iter_map_next(self)
+    }
+}
+
+extend<T> Map<T> implements Copy {}
+
+export struct Filter<T>;
+
+extend<T> Filter<T> {
+    export fun next(mut self): Option<T> {
+        __builtin_iter_filter_next(self)
+    }
+}
+
+extend<T> Filter<T> implements Copy {}
+
+// ─── todo! macro stub ─────────────────────────────────────────────────────────
+
+/// Placeholder for unimplemented functionality.
+/// Panics with a "not yet implemented" message at runtime.
+export fun todo(): ! {
+    panic("not yet implemented")
+}

@@ -1,0 +1,33 @@
+name: release-gate
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  workspace-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: workspace release gate
+        run: bash scripts/release-gate.sh workspace
+
+  vscode-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: packages/daram-vscode/package-lock.json
+      - name: install vscode extension dependencies
+        working-directory: packages/daram-vscode
+        run: npm ci
+      - name: lint vscode extension
+        working-directory: packages/daram-vscode
+        run: npm run lint

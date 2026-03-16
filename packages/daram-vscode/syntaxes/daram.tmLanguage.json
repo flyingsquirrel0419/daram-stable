@@ -1,0 +1,105 @@
+{
+  "name": "Daram",
+  "scopeName": "source.daram",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#functions"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.daram",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.daram",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.daram",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.daram",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.daram",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.daram",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.daram",
+          "match": "\\b(async|await|break|continue|else|for|if|in|loop|match|return|while)\\b"
+        },
+        {
+          "name": "keyword.declaration.daram",
+          "match": "\\b(ability|const|enum|export|extend|fun|import|implements|interface|let|static|struct|type)\\b"
+        },
+        {
+          "name": "keyword.operator.daram",
+          "match": "\\b(as|defer|errdefer|unsafe)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.daram",
+          "match": "\\b(bool|char|f32|f64|i8|i16|i32|i64|i128|isize|string|u8|u16|u32|u64|u128|usize|String)\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.daram",
+          "match": "\\b\\d+(?:_\\d+)*(?:\\.\\d+(?:_\\d+)*)?\\b"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "name": "entity.name.function.daram",
+          "match": "\\bfun\\s+([A-Za-z_][A-Za-z0-9_]*)\\b"
+        }
+      ]
+    }
+  }
+}

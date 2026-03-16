@@ -1,0 +1,197 @@
+/// std.test — unit testing framework.
+///
+/// Tests are ordinary Daram functions annotated with `#[test]`.
+/// The `dr test` command discovers and runs them automatically.
+///
+/// # Example
+/// ```dr
+/// import { assert_eq } from "std/test";
+///
+/// #[test]
+/// fun it_adds() {
+///     assert_eq(1 + 1, 2);
+/// }
+/// ```
+///
+/// # Panics and failures
+/// A test fails when:
+/// - An `assert*` macro panics.
+/// - The test function itself panics for any other reason.
+/// - An expected panic (via `#[should_panic]`) does *not* occur.
+///
+/// # Test output
+/// Passing tests are silent by default.  Failed tests print:
+/// - The assertion message.
+/// - The file and line of the failure.
+/// - Expected vs actual values where applicable.
+
+import { Result, Option, String } from "std/core";
+
+// ─── Assertions ───────────────────────────────────────────────────────────────
+
+/// Assert `cond` is true, panicking with an optional message on failure.
+export fun assert(cond: bool, msg: &str) {
+    if !cond {
+        panic(msg);
+    }
+}
+
+/// Assert two values are equal using `==`.
+///
+/// Panics with a formatted message showing left and right values on failure.
+export fun assert_eq<T: std::core::PartialEq + std::core::Debug>(left: T, right: T) {
+    if left != right {
+        // The runtime formats this using the Debug ability.
+        panic_with_fmt("assertion `left == right` failed", left, right);
+    }
+}
+
+/// Assert two values are *not* equal using `!=`.
+export fun assert_ne<T: std::core::PartialEq + std::core::Debug>(left: T, right: T) {
+    if left == right {
+        panic_with_fmt("assertion `left != right` failed", left, right);
+    }
+}
+
+/// Assert `left < right`.
+export fun assert_lt<T: std::core::PartialOrd + std::core::Debug>(left: T, right: T) {
+    if !(left < right) {
+        panic_with_fmt("assertion `left < right` failed", left, right);
+    }
+}
+
+/// Assert `left <= right`.
+export fun assert_le<T: std::core::PartialOrd + std::core::Debug>(left: T, right: T) {
+    if !(left <= right) {
+        panic_with_fmt("assertion `left <= right` failed", left, right);
+    }
+}
+
+/// Assert `left > right`.
+export fun assert_gt<T: std::core::PartialOrd + std::core::Debug>(left: T, right: T) {
+    if !(left > right) {
+        panic_with_fmt("assertion `left > right` failed", left, right);
+    }
+}
+
+/// Assert `left >= right`.
+export fun assert_ge<T: std::core::PartialOrd + std::core::Debug>(left: T, right: T) {
+    if !(left >= right) {
+        panic_with_fmt("assertion `left >= right` failed", left, right);
+    }
+}
+
+/// Assert a `Result` is `Ok`, returning the inner value.
+export fun assert_ok<T, E: std::core::Debug>(r: Result<T, E>): T {
+    match r {
+        Result::Ok(v) => v,
+        Result::Err(e) => panic("expected Ok, got Err"),
+    }
+}
+
+/// Assert a `Result` is `Err`, returning the inner error.
+export fun assert_err<T: std::core::Debug, E>(r: Result<T, E>): E {
+    match r {
+        Result::Ok(v) => panic("expected Err, got Ok"),
+        Result::Err(e) => e,
+    }
+}
+
+/// Assert an `Option` is `Some`, returning the inner value.
+export fun assert_some<T>(o: Option<T>): T {
+    match o {
+        Option::Some(v) => v,
+        Option::None => panic("expected Some, got None"),
+    }
+}
+
+/// Assert an `Option` is `None`.
+export fun assert_none<T: std::core::Debug>(o: Option<T>) {
+    match o {
+        Option::None => {},
+        Option::Some(_) => panic("expected None, got Some"),
+    }
+}
+
+/// Assert two floating-point values are within `epsilon` of each other.
+export fun assert_approx_eq(left: f64, right: f64, epsilon: f64) {
+    const diff = (left - right).abs();
+    if diff > epsilon {
+        panic("assertion `|left - right| <= epsilon` failed");
+    }
+}
+
+// ─── Internal helpers ─────────────────────────────────────────────────────────
+
+/// Format and panic with left/right values.  Implemented by the runtime.
+fun panic_with_fmt<T: std::core::Debug>(_msg: &str, _left: T, _right: T) {
+    todo!()
+}
+
+// ─── Test context ─────────────────────────────────────────────────────────────
+
+/// The test runner passes a `TestCtx` to tests that accept one.
+///
+/// Using `TestCtx` is optional — simple tests can have signature `fun(): ()`.
+export struct TestCtx {
+    _name: String,
+    _failed: bool,
+}
+
+extend TestCtx {
+    /// Mark the test as failed with a message (does not immediately abort).
+    export fun fail(mut self, msg: &str) {
+        self._failed = true;
+        eprintln("test failure: {}", msg);
+    }
+
+    /// Like `fail` but stops the test immediately.
+    export fun fatal(self, msg: &str) {
+        panic(msg);
+    }
+
+    /// Returns true if the test has been marked as failed.
+    export fun failed(self): bool { self._failed }
+}
+
+// ─── Attributes (used by the `dr test` runner) ────────────────────────────────
+
+/// Marker recognized by `dr test` — annotate test functions with this.
+///
+/// ```dr
+/// #[test]
+/// fun my_test() { ... }
+/// ```
+export ability Test {}
+
+/// Expect the test to panic.  Optionally match a specific message substring.
+///
+/// ```dr
+/// #[test]
+/// #[should_panic(expected = "divide by zero")]
+/// fun panics_on_zero() { const _ = 1 / 0; }
+/// ```
+export ability ShouldPanic {}
+
+/// Skip a test without failing.
+///
+/// ```dr
+/// #[test]
+/// #[ignore = "not yet implemented"]
+/// fun future_test() { todo!() }
+/// ```
+export ability Ignore {}
+
+// ─── Benchmark stubs ──────────────────────────────────────────────────────────
+
+/// Passed to functions annotated with `#[bench]`.
+export struct Bencher {
+    _iters: u64,
+}
+
+extend Bencher {
+    /// Run `f` for the number of iterations the harness decides.
+    export fun iter(mut self, f: fun(): ()) {
+        todo!()
+    }
+}

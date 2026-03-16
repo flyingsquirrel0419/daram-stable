@@ -1,0 +1,199 @@
+/// std.time — time, duration, and instant primitives.
+
+import { Result, Option, String } from "std/core";
+
+// ─── Duration ─────────────────────────────────────────────────────────────────
+
+/// A span of time with nanosecond precision.
+export struct Duration {
+    _secs: u64,
+    _nanos: u32,
+}
+
+extend Duration {
+    export fun new(secs: u64, nanos: u32): Duration {
+        Duration { _secs: secs + (nanos / 1_000_000_000) as u64, _nanos: nanos % 1_000_000_000 }
+    }
+
+    export fun from_secs(secs: u64): Duration {
+        Duration { _secs: secs, _nanos: 0 }
+    }
+
+    export fun from_millis(millis: u64): Duration {
+        Duration { _secs: millis / 1_000, _nanos: ((millis % 1_000) * 1_000_000) as u32 }
+    }
+
+    export fun from_micros(micros: u64): Duration {
+        Duration { _secs: micros / 1_000_000, _nanos: ((micros % 1_000_000) * 1_000) as u32 }
+    }
+
+    export fun from_nanos(nanos: u64): Duration {
+        Duration { _secs: nanos / 1_000_000_000, _nanos: (nanos % 1_000_000_000) as u32 }
+    }
+
+    export fun zero(): Duration {
+        Duration { _secs: 0, _nanos: 0 }
+    }
+
+    export fun as_secs(self): u64 { self._secs }
+
+    export fun subsec_nanos(self): u32 { self._nanos }
+
+    export fun as_millis(self): u128 {
+        self._secs as u128 * 1_000 + self._nanos as u128 / 1_000_000
+    }
+
+    export fun as_micros(self): u128 {
+        self._secs as u128 * 1_000_000 + self._nanos as u128 / 1_000
+    }
+
+    export fun as_nanos(self): u128 {
+        self._secs as u128 * 1_000_000_000 + self._nanos as u128
+    }
+
+    export fun is_zero(self): bool { self._secs == 0 && self._nanos == 0 }
+
+    export fun checked_add(self, rhs: Duration): Option<Duration> {
+        const nanos = self._nanos + rhs._nanos;
+        const carry = (nanos / 1_000_000_000) as u64;
+        const nanos = nanos % 1_000_000_000;
+        match self._secs.checked_add(rhs._secs).and_then(|s| s.checked_add(carry)) {
+            Option::Some(secs) => Option::Some(Duration { _secs: secs, _nanos: nanos }),
+            Option::None => Option::None,
+        }
+    }
+
+    export fun checked_sub(self, rhs: Duration): Option<Duration> {
+        if self._secs < rhs._secs || (self._secs == rhs._secs && self._nanos < rhs._nanos) {
+            return Option::None;
+        }
+        if self._nanos >= rhs._nanos {
+            Option::Some(Duration { _secs: self._secs - rhs._secs, _nanos: self._nanos - rhs._nanos })
+        } else {
+            Option::Some(Duration {
+                _secs: self._secs - rhs._secs - 1,
+                _nanos: self._nanos + 1_000_000_000 - rhs._nanos,
+            })
+        }
+    }
+
+    export fun saturating_add(self, rhs: Duration): Duration {
+        match self.checked_add(rhs) {
+            Option::Some(d) => d,
+            Option::None => Duration { _secs: u64::MAX, _nanos: 999_999_999 },
+        }
+    }
+
+    export fun saturating_sub(self, rhs: Duration): Duration {
+        match self.checked_sub(rhs) {
+            Option::Some(d) => d,
+            Option::None => Duration::zero(),
+        }
+    }
+}
+
+// ─── Instant ──────────────────────────────────────────────────────────────────
+
+/// A monotonic clock reading used to measure elapsed time.
+/// Wraps an opaque nanosecond counter from the OS.
+export struct Instant {
+    _nanos: u64,
+}
+
+extend Instant {
+    /// Read the current monotonic clock.
+    /// Equivalent to `clock_gettime(CLOCK_MONOTONIC)` on Linux,
+    /// `mach_absolute_time()` on macOS, and `QueryPerformanceCounter` on Windows.
+    export fun now(): Instant {
+        __builtin_time_instant_now()
+    }
+
+    /// Returns the duration elapsed since this instant was captured.
+    export fun elapsed(self): Duration {
+        Instant::now().duration_since(self)
+    }
+
+    /// Returns the duration from `earlier` to `self`.
+    /// Panics if `earlier` is later than `self`.
+    export fun duration_since(self, earlier: Instant): Duration {
+        if self._nanos < earlier._nanos {
+            panic("Instant::duration_since: earlier is later than self");
+        }
+        Duration::from_nanos(self._nanos - earlier._nanos)
+    }
+
+    /// Returns the duration from `earlier` to `self`, or `None` if `earlier` is
+    /// later than `self`.
+    export fun checked_duration_since(self, earlier: Instant): Option<Duration> {
+        if self._nanos < earlier._nanos {
+            Option::None
+        } else {
+            Option::Some(Duration::from_nanos(self._nanos - earlier._nanos))
+        }
+    }
+}
+
+// ─── SystemTime ───────────────────────────────────────────────────────────────
+
+/// A wall-clock timestamp (UTC seconds + nanoseconds since Unix epoch).
+/// Not monotonic — can go backward due to NTP, leap seconds, etc.
+export struct SystemTime {
+    _secs: i64,
+    _nanos: u32,
+}
+
+/// The Unix epoch (1970-01-01 00:00:00 UTC).
+export const UNIX_EPOCH: SystemTime = SystemTime { _secs: 0, _nanos: 0 };
+
+extend SystemTime {
+    /// Returns the current wall-clock time.
+    export fun now(): SystemTime {
+        __builtin_time_system_now()
+    }
+
+    /// Seconds since the Unix epoch (negative = before epoch).
+    export fun unix_timestamp(self): i64 { self._secs }
+
+    /// Nanosecond sub-second component.
+    export fun subsec_nanos(self): u32 { self._nanos }
+
+    /// Returns duration elapsed since Unix epoch, or an error string if the
+    /// system time is before the epoch.
+    export fun duration_since_epoch(self): Result<Duration, String> {
+        if self._secs < 0 {
+            Result::Err(String::from("SystemTime is before Unix epoch"))
+        } else {
+            Result::Ok(Duration::new(self._secs as u64, self._nanos))
+        }
+    }
+
+    export fun checked_add(self, dur: Duration): Option<SystemTime> {
+        const nanos = self._nanos + dur._nanos;
+        const carry = (nanos / 1_000_000_000) as i64;
+        const nanos = nanos % 1_000_000_000;
+        match self._secs.checked_add(dur._secs as i64).and_then(|s| s.checked_add(carry)) {
+            Option::Some(secs) => Option::Some(SystemTime { _secs: secs, _nanos: nanos }),
+            Option::None => Option::None,
+        }
+    }
+
+    export fun checked_sub(self, dur: Duration): Option<SystemTime> {
+        const total_nanos = self._nanos as i64 - dur._nanos as i64;
+        const (secs_borrow, nanos) = if total_nanos < 0 {
+            (1i64, (total_nanos + 1_000_000_000) as u32)
+        } else {
+            (0i64, total_nanos as u32)
+        };
+        match self._secs.checked_sub(dur._secs as i64).and_then(|s| s.checked_sub(secs_borrow)) {
+            Option::Some(secs) => Option::Some(SystemTime { _secs: secs, _nanos: nanos }),
+            Option::None => Option::None,
+        }
+    }
+}
+
+// ─── Formatting helpers ────────────────────────────────────────────────────────
+
+/// Returns an ISO-8601 UTC string: `YYYY-MM-DDTHH:MM:SSZ`.
+export fun format_rfc3339(t: SystemTime): String {
+    __builtin_time_format_rfc3339(t)
+}

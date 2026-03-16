@@ -1,0 +1,132 @@
+/// std.net — networking primitives.
+///
+/// All network operations require a `NetCap` capability token.
+///
+/// EXPERIMENTAL: this module is not runtime-complete yet. APIs backed by
+/// `todo!()` are intentionally unstable and must not be treated as production-ready.
+
+import { Result, Option, String } from "std/core";
+import { IoResult, Read, Write } from "std/io";
+
+// ─── Capability ───────────────────────────────────────────────────────────────
+
+/// Permission token required to open network connections.
+export struct NetCap {
+    _private: (),
+}
+
+// ─── IP addresses ─────────────────────────────────────────────────────────────
+
+export enum IpAddr {
+    V4(u8, u8, u8, u8),
+    V6([u8; 16]),
+}
+
+export struct SocketAddr {
+    export addr: IpAddr,
+    export port: u16,
+}
+
+extend SocketAddr {
+    export fun new(addr: IpAddr, port: u16): SocketAddr {
+        SocketAddr { addr, port }
+    }
+
+    export fun from_str(s: &str): Result<SocketAddr, String> {
+        __builtin_socket_addr_parse(s)
+    }
+}
+
+extend NetCap implements std::core::Copy {}
+
+// ─── TcpStream ────────────────────────────────────────────────────────────────
+
+/// A TCP connection.
+export struct TcpStream {
+    _fd: i32,
+}
+
+extend TcpStream {
+    /// Open a TCP connection to `addr`.
+    export fun connect(addr: SocketAddr, _cap: NetCap): IoResult<TcpStream> {
+        __builtin_tcp_connect(addr)
+    }
+
+    /// Open a TCP connection to `addr` with a timeout.
+    export fun connect_timeout(addr: SocketAddr, timeout_ms: u64, _cap: NetCap): IoResult<TcpStream> {
+        __builtin_tcp_connect_timeout(addr, timeout_ms)
+    }
+
+    export fun peer_addr(self): IoResult<SocketAddr> { todo!() }
+    export fun local_addr(self): IoResult<SocketAddr> { todo!() }
+
+    export fun set_read_timeout(self, ms: Option<u64>): IoResult<()> { todo!() }
+    export fun set_write_timeout(self, ms: Option<u64>): IoResult<()> { todo!() }
+
+    export fun shutdown(self): IoResult<()> { __builtin_tcp_shutdown(self) }
+}
+
+extend TcpStream implements Read {
+    fun read(mut self, buf: &mut [u8]): IoResult<usize> {
+        __builtin_tcp_read(self)
+    }
+}
+
+extend TcpStream implements Write {
+    fun write(mut self, buf: &[u8]): IoResult<usize> {
+        __builtin_tcp_write(self, buf)
+    }
+    fun flush(mut self): IoResult<()> {
+        Result::Ok(())
+    }
+}
+
+// ─── TcpListener ─────────────────────────────────────────────────────────────
+
+/// A TCP server socket.
+export struct TcpListener {
+    _fd: i32,
+}
+
+extend TcpListener {
+    /// Bind a TCP listener to `addr`.
+    export fun bind(addr: SocketAddr, _cap: &NetCap): IoResult<TcpListener> {
+        __builtin_tcp_bind(addr)
+    }
+
+    /// Accept the next incoming connection.
+    export fun accept(mut self): IoResult<(TcpStream, SocketAddr)> {
+        __builtin_tcp_accept(self)
+    }
+
+    export fun local_addr(self): IoResult<SocketAddr> { todo!() }
+    export fun set_nonblocking(self, yes: bool): IoResult<()> { todo!() }
+}
+
+// ─── UdpSocket ────────────────────────────────────────────────────────────────
+
+export struct UdpSocket {
+    _fd: i32,
+}
+
+extend UdpSocket {
+    export fun bind(addr: SocketAddr, _cap: &NetCap): IoResult<UdpSocket> {
+        __builtin_udp_bind(addr)
+    }
+
+    export fun send_to(self, buf: &[u8], addr: SocketAddr): IoResult<usize> {
+        __builtin_udp_send_to(self, buf, addr)
+    }
+    export fun recv_from(self, buf: &mut [u8]): IoResult<(usize, SocketAddr)> {
+        __builtin_udp_recv_from(self, buf)
+    }
+    export fun connect(self, addr: SocketAddr): IoResult<()> {
+        __builtin_udp_connect(self, addr)
+    }
+    export fun send(self, buf: &[u8]): IoResult<usize> {
+        __builtin_udp_send(self, buf)
+    }
+    export fun recv(self, buf: &mut [u8]): IoResult<usize> {
+        __builtin_udp_recv(self, buf)
+    }
+}

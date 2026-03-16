@@ -1,0 +1,24 @@
+import { Result, String } from "std/core";
+
+export struct Error {}
+
+export struct Arguments;
+
+export struct Formatter(export std::core::String);
+
+extend Formatter {
+    export fun new(): Formatter {
+        Formatter(std::core::String::new())
+    }
+
+    export fun write_str(mut self, s: &str): Result<(), Error> {
+        self.0.push_str(s);
+        std::core::Result::Ok(())
+    }
+
+    export fun finish(self): std::core::String {
+        self.0
+    }
+}
+
+export fun format(fmt: &str): std::core::String;

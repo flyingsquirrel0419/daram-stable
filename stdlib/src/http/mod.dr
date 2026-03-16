@@ -1,0 +1,188 @@
+/// std.http — HTTP client and server primitives.
+
+import { Result, Option, String } from "std/core";
+import { HashMap } from "std/collections";
+import { NetCap } from "std/net";
+import { IoResult } from "std/io";
+
+// ─── HTTP method ──────────────────────────────────────────────────────────────
+
+export enum Method {
+    Get,
+    Post,
+    Put,
+    Patch,
+    Delete,
+    Head,
+    Options,
+    Trace,
+    Connect,
+    Custom(String),
+}
+
+extend Method {
+    export fun as_str(self): &str {
+        __builtin_http_method_as_str(self)
+    }
+}
+
+fun string_from_str(s: &str): String {
+    const text = std::core::String::new();
+    text.push_str(s);
+    text
+}
+
+// ─── Status codes ─────────────────────────────────────────────────────────────
+
+export struct StatusCode(export u16);
+
+extend StatusCode {
+    export fun is_success(self): bool     { self.0 >= 200 && self.0 < 300 }
+    export fun is_redirect(self): bool    { self.0 >= 300 && self.0 < 400 }
+    export fun is_client_error(self): bool { self.0 >= 400 && self.0 < 500 }
+    export fun is_server_error(self): bool { self.0 >= 500 && self.0 < 600 }
+    export fun as_u16(self): u16           { self.0 }
+}
+
+export const OK: StatusCode = StatusCode(200);
+export const CREATED: StatusCode = StatusCode(201);
+export const NO_CONTENT: StatusCode = StatusCode(204);
+export const BAD_REQUEST: StatusCode = StatusCode(400);
+export const UNAUTHORIZED: StatusCode = StatusCode(401);
+export const FORBIDDEN: StatusCode = StatusCode(403);
+export const NOT_FOUND: StatusCode = StatusCode(404);
+export const METHOD_NOT_ALLOWED: StatusCode = StatusCode(405);
+export const CONFLICT: StatusCode = StatusCode(409);
+export const GONE: StatusCode = StatusCode(410);
+export const TOO_MANY_REQUESTS: StatusCode = StatusCode(429);
+export const INTERNAL_SERVER_ERROR: StatusCode = StatusCode(500);
+export const SERVICE_UNAVAILABLE: StatusCode = StatusCode(503);
+
+// ─── Headers ──────────────────────────────────────────────────────────────────
+
+export struct Headers {
+    _map: HashMap<String, String>,
+}
+
+extend Headers {
+    export fun new(): Headers {
+        Headers { _map: std::collections::HashMap::new() }
+    }
+
+    export fun get(self, name: &str): Option<String> {
+        __builtin_http_headers_get(self, name)
+    }
+
+    export fun set(mut self, name: &str, value: &str) {
+        self._map.insert(string_from_str(name), string_from_str(value));
+    }
+
+    export fun content_type(self): Option<String> {
+        self.get("content-type")
+    }
+
+    export fun authorization(self): Option<String> {
+        self.get("authorization")
+    }
+}
+
+// ─── Request ──────────────────────────────────────────────────────────────────
+
+export struct Request {
+    export method: Method,
+    export url: String,
+    export headers: Headers,
+    export body: String,
+}
+
+extend Request {
+    export fun new(method: Method, url: &str): Request {
+        Request {
+            method,
+            url: string_from_str(url),
+            headers: Headers::new(),
+            body: std::core::String::new(),
+        }
+    }
+
+    export fun get(url: &str): Request { Request::new(Method::Get, url) }
+    export fun post(url: &str): Request { Request::new(Method::Post, url) }
+    export fun put(url: &str): Request { Request::new(Method::Put, url) }
+    export fun delete(url: &str): Request { Request::new(Method::Delete, url) }
+
+    export fun header(mut self, name: &str, value: &str): Request {
+        self.headers.set(name, value);
+        self
+    }
+
+    export fun body_bytes(mut self, bytes: String): Request {
+        self.body = bytes;
+        self
+    }
+
+    export fun body_str(mut self, s: &str): Request {
+        self.body = string_from_str(s);
+        self
+    }
+
+    export fun json_body(mut self, json: &str): Request {
+        self.headers.set("content-type", "application/json");
+        self.body = string_from_str(json);
+        self
+    }
+}
+
+// ─── Response ─────────────────────────────────────────────────────────────────
+
+export struct Response {
+    export status: StatusCode,
+    export headers: Headers,
+    export body: String,
+}
+
+extend Response {
+    export fun body_str(self): Result<String, String> {
+        std::core::Result::Ok(self.body)
+    }
+
+    export fun body_json(self): Result<std::json::Value, String> {
+        __builtin_http_body_json(self)
+    }
+}
+
+// ─── Client ───────────────────────────────────────────────────────────────────
+
+/// An HTTP client.
+/// Requires a `NetCap` to construct.
+export struct Client {
+    _timeout_ms: u64,
+    _follow_redirects: bool,
+}
+
+extend Client {
+    export fun new(_cap: NetCap): Client {
+        Client { _timeout_ms: 30_000 as u64, _follow_redirects: true }
+    }
+
+    export fun timeout_ms(mut self, ms: u64): Client {
+        self._timeout_ms = ms;
+        self
+    }
+
+    export fun follow_redirects(mut self, yes: bool): Client {
+        self._follow_redirects = yes;
+        self
+    }
+
+    export fun send(self, req: Request): Result<Response, String> {
+        __builtin_http_send(self, req)
+    }
+
+    export fun get(self, url: &str): Result<Response, String> {
+        self.send(Request::get(url))
+    }
+
+    export fun post(self, url: &str, body: &str): Result<Response, String> {
+        self.send(Request::post(url).body_str(body))
+    }
+}

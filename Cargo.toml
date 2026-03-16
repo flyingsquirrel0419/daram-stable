@@ -1,0 +1,15 @@
+[workspace]
+members = [
+    "compiler",
+    "cli",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+version = "1.0.0"
+authors = ["Daram Team"]
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+daram-compiler = { path = "compiler" }

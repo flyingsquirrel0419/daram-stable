@@ -1,0 +1,23 @@
+[package]
+name = "dr"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "The Daram language CLI"
+
+[[bin]]
+name = "dr"
+path = "src/main.rs"
+
+[dependencies]
+daram-compiler = { workspace = true }
+base64 = "0.22"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+toml = "0.8"
+url = "2"
+flate2 = "1"
+tar = "0.4"
+zip = { version = "2", default-features = false, features = ["deflate"] }

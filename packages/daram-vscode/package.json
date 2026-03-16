@@ -1,0 +1,101 @@
+{
+  "name": "daram-vscode",
+  "displayName": "Daram",
+  "description": "VS Code support for the Daram language via dr lsp",
+  "version": "1.0.0",
+  "publisher": "flyingsquirrel0419",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/flyingsquirrel0419/daram-stable.git"
+  },
+  "engines": {
+    "vscode": "^1.89.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "daram",
+    "lsp",
+    "language-server"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:daram",
+    "onCommand:daram.restartLanguageServer"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "daram",
+        "aliases": [
+          "Daram",
+          "daram"
+        ],
+        "extensions": [
+          ".dr"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "daram",
+        "scopeName": "source.daram",
+        "path": "./syntaxes/daram.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "daram.restartLanguageServer",
+        "title": "Daram: Restart Language Server"
+      }
+    ],
+    "configuration": {
+      "title": "Daram",
+      "properties": {
+        "daram.server.path": {
+          "type": "string",
+          "default": "dr",
+          "markdownDescription": "Path to the `dr` executable used to start the Daram language server."
+        },
+        "daram.server.args": {
+          "type": "array",
+          "default": [
+            "lsp"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "markdownDescription": "Arguments passed to the Daram language server process."
+        },
+        "daram.server.trace": {
+          "type": "string",
+          "default": "off",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "markdownDescription": "Trace level for the Daram language client."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -w -p ./",
+    "package": "npm run compile && vsce package",
+    "lint": "tsc --noEmit -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^8.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.50",
+    "@types/vscode": "^1.89.0",
+    "@vscode/vsce": "^3.2.2",
+    "typescript": "^5.8.3"
+  }
+}

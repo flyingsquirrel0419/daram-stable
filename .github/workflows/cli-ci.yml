@@ -1,0 +1,44 @@
+name: cli-ci
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+
+jobs:
+  cli-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo test cli
+        run: CARGO_BUILD_JOBS=1 cargo test -q -p dr
+
+  install-verification:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: build cli
+        run: cargo build -q -p dr
+      - name: smoke check sample workspace
+        run: |
+          tmpdir="$(mktemp -d)"
+          mkdir -p "$tmpdir/src"
+          cat > "$tmpdir/daram.toml" <<'EOF'
+          [package]
+          name = "ci-smoke"
+          version = "0.1.0"
+          EOF
+          cat > "$tmpdir/src/main.dr" <<'EOF'
+          fn main() -> i32 {
+              0
+          }
+          EOF
+          (
+            cd "$tmpdir"
+            cargo run -q --manifest-path "$GITHUB_WORKSPACE/cli/Cargo.toml" -- build --check
+          )
+        working-directory: ${{ github.workspace }}

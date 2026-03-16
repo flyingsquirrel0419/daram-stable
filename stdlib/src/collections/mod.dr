@@ -1,0 +1,348 @@
+/// std.collections — general-purpose data structures.
+///
+/// EXPERIMENTAL: this module is not runtime-complete yet. APIs backed by
+/// `todo!()` are intentionally unstable and must not be treated as production-ready.
+
+import { Option, Result, Iterator, Hash, Eq, Map, Filter } from "std/core";
+
+// ─── Vec<T> ───────────────────────────────────────────────────────────────────
+
+/// A contiguous, heap-allocated, growable array.
+///
+/// Elements are stored in insertion order.
+/// Random access is O(1), push/pop at the end is amortised O(1).
+export struct Vec<T> {
+    _buf: [T],
+    _len: usize,
+    _cap: usize,
+}
+
+export struct VecIter<T>;
+
+extend<T> Vec<T> {
+    /// Create an empty `Vec`.
+    export fun new(): Vec<T> {
+        __builtin_vec_new()
+    }
+
+    /// Create an empty `Vec` with at least `cap` slots pre-allocated.
+    export fun with_capacity(_cap: usize): Vec<T> {
+        __builtin_vec_new()
+    }
+
+    /// Return the number of elements.
+    export fun len(self): usize {
+        __builtin_vec_len(self)
+    }
+
+    /// Return `true` if there are no elements.
+    export fun is_empty(self): bool {
+        self._len == 0
+    }
+
+    /// Return the total allocated capacity.
+    export fun capacity(self): usize {
+        self._cap
+    }
+
+    /// Append `value` to the end.
+    export fun push(mut self, value: T) {
+        __builtin_vec_push(self, value)
+    }
+
+    /// Remove and return the last element, or `None` if empty.
+    export fun pop(mut self): Option<T> {
+        __builtin_vec_pop(self)
+    }
+
+    /// Return a reference to the element at `index`, or `None` if out of bounds.
+    export fun get(self, index: usize): Option<&T> {
+        __builtin_vec_get(self, index)
+    }
+
+    /// Return a mutable reference to the element at `index`.
+    export fun get_mut(mut self, index: usize): Option<&mut T> {
+        if index < self._len {
+            Option::Some(&mut self._buf[index])
+        } else {
+            Option::None
+        }
+    }
+
+    /// Insert `value` at `index`, shifting subsequent elements right. O(n).
+    export fun insert(mut self, index: usize, value: T) {
+        todo!()
+    }
+
+    /// Remove and return the element at `index`, shifting subsequent elements left. O(n).
+    export fun remove(mut self, index: usize): T {
+        todo!()
+    }
+
+    /// Clear all elements (does not release memory).
+    export fun clear(mut self) {
+        self._len = 0;
+    }
+
+    /// Return an iterator over elements by shared reference.
+    export fun iter(self): std::collections::VecIter<T> {
+        __builtin_vec_iter(self)
+    }
+
+    /// Sort elements in ascending order (requires `Ord`).
+    export fun sort(mut self) where T: std::core::Ord {
+        todo!()
+    }
+
+    /// Sort elements using a comparison function.
+    export fun sort_by(mut self, cmp: fun(&T, &T): std::core::Ordering) {
+        todo!()
+    }
+
+    /// Retain only the elements for which `pred` returns `true`.
+    export fun retain(mut self, pred: fun(&T): bool) {
+        todo!()
+    }
+
+    /// Return the number of elements matching `pred`.
+    export fun count_where(self, pred: fun(&T): bool): usize {
+        const n = 0usize;
+        for item in self.iter() {
+            if pred(item) { n += 1; }
+        }
+        n
+    }
+
+    /// Deduplicate consecutive equal elements (requires `PartialEq`).
+    export fun dedup(mut self) where T: std::core::PartialEq {
+        todo!()
+    }
+
+    /// Extend the vector with elements from an iterator.
+    export fun extend<I: Iterator<Item = T>>(mut self, iter: I) {
+        todo!()
+    }
+
+    /// Truncate the vector to `new_len` elements.
+    export fun truncate(mut self, new_len: usize) {
+        todo!()
+    }
+}
+
+extend<T> VecIter<T> implements Copy {}
+
+extend<T> VecIter<T> {
+    export fun next(mut self): Option<&T> {
+        __builtin_vec_iter_next(self)
+    }
+
+    export fun count(self): usize {
+        __builtin_vec_iter_count(self)
+    }
+
+    export fun map<B>(self, f: fun(&T): B): std::core::Map<B> {
+        __builtin_iter_map(self, f)
+    }
+
+    export fun filter(self, pred: fun(&T): bool): std::core::Filter<&T> {
+        __builtin_iter_filter(self, pred)
+    }
+
+    export fun collect_vec(mut self): std::collections::Vec<&T> {
+        __builtin_iter_collect_vec(self)
+    }
+}
+
+extend<T> Map<T> {
+    export fun collect_vec(mut self): std::collections::Vec<T> {
+        __builtin_iter_collect_vec(self)
+    }
+}
+
+extend<T> Filter<T> {
+    export fun map<B>(self, f: fun(T): B): std::core::Map<B> {
+        __builtin_iter_map(self, f)
+    }
+
+    export fun collect_vec(mut self): std::collections::Vec<T> {
+        __builtin_iter_collect_vec(self)
+    }
+}
+
+// ─── HashMap<K, V> ───────────────────────────────────────────────────────────
+
+/// An unordered hash map from keys to values.
+///
+/// Keys must implement `Hash + Eq`.
+/// Insertion, lookup, and removal are average O(1).
+export struct HashMap<K, V> {
+    _table: [u8], // Opaque internal representation
+}
+
+export struct HashMapIter<K, V>;
+
+extend<K: Hash + Eq, V> HashMap<K, V> {
+    export fun new(): HashMap<K, V> {
+        __builtin_hashmap_new()
+    }
+
+    export fun with_capacity(_cap: usize): HashMap<K, V> {
+        __builtin_hashmap_new()
+    }
+
+    export fun len(self): usize {
+        __builtin_hashmap_len(self)
+    }
+
+    export fun is_empty(self): bool {
+        self.len() == 0
+    }
+
+    /// Insert a key-value pair. Returns the previous value if the key existed.
+    export fun insert(mut self, key: K, value: V): Option<V> {
+        __builtin_hashmap_insert(self, key, value)
+    }
+
+    /// Look up a key, returning a shared reference to its value.
+    export fun get(self, key: &K): Option<&V> {
+        __builtin_hashmap_get(self, key)
+    }
+
+    /// Look up a key, returning a mutable reference to its value.
+    export fun get_mut(mut self, key: &K): Option<&mut V> {
+        todo!()
+    }
+
+    /// Remove a key, returning its value.
+    export fun remove(mut self, key: &K): Option<V> {
+        __builtin_hashmap_remove(self, key)
+    }
+
+    /// Return `true` if the map contains `key`.
+    export fun contains_key(self, key: &K): bool {
+        __builtin_hashmap_contains(self, key)
+    }
+
+    export fun iter(self): std::collections::HashMapIter<K, V> {
+        __builtin_hashmap_iter(self)
+    }
+
+    export fun keys(self): std::collections::HashMapKeys<K, V> {
+        todo!()
+    }
+
+    export fun values(self): std::collections::HashMapValues<K, V> {
+        todo!()
+    }
+
+    export fun clear(mut self) {
+        todo!()
+    }
+}
+
+extend<K: Hash + Eq, V> HashMapIter<K, V> implements Copy {}
+
+extend<K: Hash + Eq, V> HashMapIter<K, V> {
+    export fun next(mut self): Option<(&K, &V)> {
+        __builtin_hashmap_iter_next(self)
+    }
+
+    export fun count(self): usize {
+        __builtin_hashmap_iter_count(self)
+    }
+
+    export fun map<B>(self, f: fun((&K, &V)): B): std::core::Map<B> {
+        __builtin_iter_map(self, f)
+    }
+
+    export fun filter(self, pred: fun((&K, &V)): bool): std::core::Filter<(&K, &V)> {
+        __builtin_iter_filter(self, pred)
+    }
+
+    export fun collect_vec(mut self): std::collections::Vec<(&K, &V)> {
+        __builtin_iter_collect_vec(self)
+    }
+}
+
+// ─── HashSet<T> ───────────────────────────────────────────────────────────────
+
+/// An unordered set of unique values.
+export struct HashSet<T> {
+    _inner: HashMap<T, ()>,
+}
+
+extend<T: Hash + Eq> HashSet<T> {
+    export fun new(): HashSet<T> {
+        HashSet { _inner: HashMap::new() }
+    }
+
+    export fun insert(mut self, value: T): bool {
+        self._inner.insert(value, ()).is_none()
+    }
+
+    export fun contains(self, value: &T): bool {
+        self._inner.contains_key(value)
+    }
+
+    export fun remove(mut self, value: &T): bool {
+        self._inner.remove(value).is_some()
+    }
+
+    export fun len(self): usize {
+        self._inner.len()
+    }
+
+    export fun is_empty(self): bool {
+        self._inner.is_empty()
+    }
+}
+
+// ─── VecDeque<T> ─────────────────────────────────────────────────────────────
+
+/// A double-ended queue backed by a ring buffer.
+export struct VecDeque<T> {
+    _buf: [T],
+    _head: usize,
+    _len: usize,
+}
+
+extend<T> VecDeque<T> {
+    export fun new(): VecDeque<T> {
+        VecDeque { _buf: [], _head: 0, _len: 0 }
+    }
+
+    export fun len(self): usize { self._len }
+    export fun is_empty(self): bool { self._len == 0 }
+
+    export fun push_back(mut self, value: T) { todo!() }
+    export fun push_front(mut self, value: T) { todo!() }
+    export fun pop_back(mut self): Option<T> { todo!() }
+    export fun pop_front(mut self): Option<T> { todo!() }
+
+    export fun front(self): Option<&T> { todo!() }
+    export fun back(self): Option<&T> { todo!() }
+}
+
+// ─── BTreeMap<K, V> ──────────────────────────────────────────────────────────
+
+/// An ordered map backed by a balanced B-tree.
+/// Keys are stored in sorted order; requires `Ord`.
+export struct BTreeMap<K, V> {
+    _root: [u8],
+}
+
+extend<K: std::core::Ord, V> BTreeMap<K, V> {
+    export fun new(): BTreeMap<K, V> {
+        BTreeMap { _root: [] }
+    }
+
+    export fun insert(mut self, key: K, value: V): Option<V> { todo!() }
+    export fun get(self, key: &K): Option<&V> { todo!() }
+    export fun remove(mut self, key: &K): Option<V> { todo!() }
+    export fun contains_key(self, key: &K): bool { self.get(key).is_some() }
+    export fun len(self): usize { todo!() }
+    export fun is_empty(self): bool { self.len() == 0 }
+
+    export fun first_key(self): Option<&K> { todo!() }
+    export fun last_key(self): Option<&K> { todo!() }
+}

@@ -1,0 +1,23 @@
+/// std.task — minimal async runtime utilities.
+///
+/// This is currently a single-threaded, eager runtime surface for v1.
+
+export struct JoinHandle<T>;
+
+extend<T> JoinHandle<T> {
+    export fun join(self): T {
+        __builtin_task_join(self)
+    }
+}
+
+export fun spawn<T>(job: fun(): T): JoinHandle<T> {
+    __builtin_task_spawn(job)
+}
+
+export fun block_on<T>(job: fun(): T): T {
+    __builtin_task_block_on(job)
+}
+
+export fun sleep_ms(ms: u64) {
+    __builtin_task_sleep_ms(ms)
+}

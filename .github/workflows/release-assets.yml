@@ -1,0 +1,151 @@
+name: release-assets
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  workspace-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: workspace release gate
+        run: bash scripts/release-gate.sh workspace
+
+  vscode-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: packages/daram-vscode/package-lock.json
+      - name: install vscode extension dependencies
+        working-directory: packages/daram-vscode
+        run: npm ci
+      - name: lint vscode extension
+        working-directory: packages/daram-vscode
+        run: npm run lint
+
+  build-cli:
+    needs:
+      - workspace-gate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive_format: tar.gz
+            binary_name: dr
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            archive_format: tar.gz
+            binary_name: dr
+          - os: macos-14
+            target: aarch64-apple-darwin
+            archive_format: tar.gz
+            binary_name: dr
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+            archive_format: zip
+            binary_name: dr.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: build cli
+        run: cargo build -q -p dr --release
+      - name: package cli (unix)
+        if: matrix.archive_format == 'tar.gz'
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          asset="dr-${version}-${{ matrix.target }}.tar.gz"
+          mkdir -p dist
+          cp "target/release/${{ matrix.binary_name }}" dist/
+          tar -czf "$asset" -C dist "${{ matrix.binary_name }}"
+      - name: package cli (windows)
+        if: matrix.archive_format == 'zip'
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          $asset = "dr-$version-${{ matrix.target }}.zip"
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item "target/release/${{ matrix.binary_name }}" "dist/${{ matrix.binary_name }}"
+          Compress-Archive -Path "dist/${{ matrix.binary_name }}" -DestinationPath $asset
+      - name: upload cli artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.target }}
+          path: dr-*
+
+  package-vscode:
+    needs:
+      - vscode-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: packages/daram-vscode/package-lock.json
+      - name: install extension dependencies
+        working-directory: packages/daram-vscode
+        run: npm ci
+      - name: package extension
+        working-directory: packages/daram-vscode
+        run: npm run package
+      - name: rename vsix
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mv packages/daram-vscode/*.vsix "daram-vscode-${version}.vsix"
+      - name: upload vsix
+        uses: actions/upload-artifact@v4
+        with:
+          name: daram-vscode-vsix
+          path: daram-vscode-*.vsix
+
+  publish-release:
+    needs:
+      - build-cli
+      - package-vscode
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+      - name: flatten artifacts
+        shell: bash
+        run: |
+          mkdir -p dist
+          find release-assets -type f -maxdepth 2 -exec cp {} dist/ \;
+          cp scripts/install.sh dist/install.sh
+          cp scripts/install.ps1 dist/install.ps1
+          chmod +x dist/install.sh
+      - name: create checksums
+        shell: bash
+        run: |
+          cd dist
+          sha256sum dr-* daram-vscode-*.vsix > SHA256SUMS
+      - name: publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/dr-*
+            dist/SHA256SUMS
+            dist/install.sh
+            dist/install.ps1
+            dist/daram-vscode-*.vsix

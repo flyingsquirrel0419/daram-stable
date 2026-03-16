@@ -1,0 +1,230 @@
+/// std.fs — filesystem access.
+///
+/// All filesystem operations require a `FsWriteCap` or `FsReadCap` capability
+/// token, enforcing the principle that file access must be explicitly granted.
+///
+/// EXPERIMENTAL: this module is not runtime-complete yet. APIs backed by
+/// `todo!()` are intentionally unstable and must not be treated as production-ready.
+
+import { Result, Option, String } from "std/core";
+import { IoResult, Read, Write, Seek } from "std/io";
+
+// ─── Capabilities ─────────────────────────────────────────────────────────────
+
+/// Permission token required to read from the filesystem.
+/// Must be passed explicitly to any function that reads files.
+export struct FsReadCap {
+    _private: (),
+}
+
+/// Permission token required to write to the filesystem.
+/// Must be passed explicitly to any function that creates or modifies files.
+export struct FsWriteCap {
+    _private: (),
+}
+
+// ─── Path ─────────────────────────────────────────────────────────────────────
+
+/// An owned filesystem path.
+export struct PathBuf {
+    _inner: String,
+}
+
+extend PathBuf {
+    export fun new(): PathBuf {
+        __builtin_pathbuf_new()
+    }
+
+    export fun from(s: &str): PathBuf {
+        __builtin_pathbuf_from(s)
+    }
+
+    export fun push(mut self, component: &str) {
+        // SECURITY: validate component — no `..`, no absolute paths
+        if component.contains("..") || component.starts_with('/') || component.starts_with('\\') {
+            panic("invalid path component");
+        }
+        if !self._inner.is_empty() {
+            self._inner.push('/');
+        }
+        self._inner.push_str(component);
+    }
+
+    export fun as_str(self): &str {
+        __builtin_pathbuf_as_str(self)
+    }
+
+    export fun join(self, other: &str): PathBuf {
+        const p = self;
+        p.push(other);
+        p
+    }
+
+    export fun file_name(self): Option<&str> {
+        __builtin_pathbuf_file_name(self)
+    }
+
+    export fun extension(self): Option<&str> {
+        __builtin_pathbuf_extension(self)
+    }
+
+    export fun parent(self): Option<PathBuf> {
+        __builtin_pathbuf_parent(self)
+    }
+
+    export fun exists(self, _cap: &FsReadCap): bool {
+        __builtin_fs_exists(self)
+    }
+
+    export fun is_file(self, _cap: &FsReadCap): bool {
+        __builtin_pathbuf_is_file(self)
+    }
+
+    export fun is_dir(self, _cap: &FsReadCap): bool {
+        __builtin_pathbuf_is_dir(self)
+    }
+}
+
+// ─── File ─────────────────────────────────────────────────────────────────────
+
+/// An open file handle.
+export struct File {
+    _fd: i32,
+}
+
+/// Options for opening a file.
+export struct OpenOptions {
+    export read: bool,
+    export write: bool,
+    export append: bool,
+    export create: bool,
+    export create_new: bool,
+    export truncate: bool,
+}
+
+extend OpenOptions {
+    export fun new(): OpenOptions {
+        OpenOptions {
+            read: false, write: false, append: false,
+            create: false, create_new: false, truncate: false,
+        }
+    }
+
+    export fun read(mut self, yes: bool): OpenOptions { self.read = yes; self }
+    export fun write(mut self, yes: bool): OpenOptions { self.write = yes; self }
+    export fun append(mut self, yes: bool): OpenOptions { self.append = yes; self }
+    export fun create(mut self, yes: bool): OpenOptions { self.create = yes; self }
+    export fun truncate(mut self, yes: bool): OpenOptions { self.truncate = yes; self }
+
+    export fun open(self, path: &PathBuf, _cap: &FsReadCap): IoResult<File> {
+        // Use sentinel fd — actual I/O uses read_to_string at a higher level
+        Result::Ok(File { _fd: 0 })
+    }
+
+    export fun create_file(self, path: &PathBuf, _cap: &FsWriteCap): IoResult<File> {
+        // Use sentinel fd — actual I/O uses write_str at a higher level
+        Result::Ok(File { _fd: 1 })
+    }
+}
+
+extend File {
+    /// Open a file for reading.
+    export fun open(path: &PathBuf, cap: &FsReadCap): IoResult<File> {
+        OpenOptions::new().read(true).open(path, cap)
+    }
+
+    /// Create or truncate a file for writing.
+    export fun create(path: &PathBuf, cap: &FsWriteCap): IoResult<File> {
+        OpenOptions::new().write(true).create(true).truncate(true).create_file(path, cap)
+    }
+}
+
+extend File implements Read {
+    fun read(mut self, buf: &mut [u8]): IoResult<usize> { todo!() }
+}
+
+extend File implements Write {
+    fun write(mut self, buf: &[u8]): IoResult<usize> { todo!() }
+    fun flush(mut self): IoResult<()> { todo!() }
+}
+
+extend File implements Seek {
+    fun seek(mut self, pos: std::io::SeekFrom): IoResult<u64> { todo!() }
+}
+
+// ─── Convenience functions ────────────────────────────────────────────────────
+
+/// Read the entire contents of `path` into a `String`.
+export fun read_to_string(path: &PathBuf, _cap: &FsReadCap): IoResult<String> {
+    __builtin_fs_read_to_string(path)
+}
+
+/// Read the entire contents of `path` into a `Vec<u8>`.
+export fun read(path: &PathBuf, cap: &FsReadCap): IoResult<std::collections::Vec<u8>> {
+    const file = File::open(path, cap)?;
+    const buf = std::collections::Vec::new();
+    file.read_to_end(&mut buf)?;
+    Result::Ok(buf)
+}
+
+/// Write `data` to `path`, creating or truncating the file.
+export fun write(path: &PathBuf, data: &[u8], cap: &FsWriteCap): IoResult<()> {
+    const file = File::create(path, cap)?;
+    file.write_all(data)
+}
+
+/// Write a string to `path`.
+export fun write_str(path: &PathBuf, content: &str, _cap: &FsWriteCap): IoResult<()> {
+    __builtin_fs_write_str(path, content)
+}
+
+/// Create a directory and all parents.
+export fun create_dir_all(path: &PathBuf, _cap: &FsWriteCap): IoResult<()> {
+    __builtin_fs_create_dir_all(path)
+}
+
+/// Remove a file.
+export fun remove_file(path: &PathBuf, _cap: &FsWriteCap): IoResult<()> {
+    __builtin_fs_remove_file(path)
+}
+
+/// Remove an empty directory.
+export fun remove_dir(path: &PathBuf, _cap: &FsWriteCap): IoResult<()> {
+    __builtin_fs_remove_dir(path)
+}
+
+/// Copy `src` to `dst`.
+export fun copy(src: &PathBuf, dst: &PathBuf, _read: &FsReadCap, _write: &FsWriteCap): IoResult<u64> {
+    __builtin_fs_copy(src, dst)
+}
+
+/// Return an iterator over directory entries.
+export fun read_dir(path: &PathBuf, _cap: &FsReadCap): IoResult<std::fs::ReadDir> {
+    todo!()
+}
+
+// ─── DirEntry ─────────────────────────────────────────────────────────────────
+
+export struct DirEntry {
+    _inner: [u8],
+}
+
+extend DirEntry {
+    export fun path(self): PathBuf { todo!() }
+    export fun file_name(self): String { todo!() }
+    export fun is_file(self): bool { todo!() }
+    export fun is_dir(self): bool { todo!() }
+    export fun file_size(self): u64 { todo!() }
+}
+
+export struct ReadDir {
+    _inner: [u8],
+}
+
+extend ReadDir implements std::core::Iterator {
+    type Item = IoResult<DirEntry>;
+
+    fun next(mut self): Option<IoResult<DirEntry>> {
+        todo!()
+    }
+}

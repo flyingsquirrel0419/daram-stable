@@ -1,0 +1,15 @@
+pub mod add;
+pub mod bench;
+pub mod build;
+pub mod check;
+pub mod doc;
+pub mod exec_mir;
+pub mod fmt;
+pub mod init;
+pub mod install;
+pub mod lint;
+pub mod lsp;
+pub mod new;
+pub mod remove;
+pub mod run_cmd;
+pub mod test;

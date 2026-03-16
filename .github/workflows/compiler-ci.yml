@@ -1,0 +1,20 @@
+name: compiler-ci
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+
+jobs:
+  compiler-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo test compiler lib
+        run: CARGO_BUILD_JOBS=1 cargo test -q -p daram-compiler --lib
+      - name: cargo test frontend regression
+        run: CARGO_BUILD_JOBS=1 cargo test -q -p daram-compiler --test frontend_regression
+      - name: cargo test interpreter regression
+        run: CARGO_BUILD_JOBS=1 cargo test -q -p daram-compiler --test interpreter_regression

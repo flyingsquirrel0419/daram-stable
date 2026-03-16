@@ -1,0 +1,10 @@
+/target
+/dr.lock
+/package-server/.next
+/package-server/data
+/package-server/node_modules
+/package-server/bin/cloudflared
+/package-server/.cloudflared
+/packages/daram-vscode/node_modules
+/packages/daram-vscode/out
+/packages/daram-vscode/*.vsix

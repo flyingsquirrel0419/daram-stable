@@ -1,0 +1,168 @@
+/// std.json — JSON serialization and deserialization.
+
+import { Result, Option, String } from "std/core";
+import { Vec, HashMap } from "std/collections";
+
+// ─── Value ────────────────────────────────────────────────────────────────────
+
+/// A JSON value.
+export enum Value {
+    Null,
+    Bool(bool),
+    Number(f64),
+    Str(String),
+    Array(Vec<Value>),
+    Object(HashMap<String, Value>),
+}
+
+extend Value {
+    /// Returns `true` if this value is `null`.
+    export fun is_null(self): bool {
+        match self { Value::Null => true, _ => false }
+    }
+
+    /// Returns `true` if this value is a boolean.
+    export fun is_bool(self): bool {
+        match self { Value::Bool(_) => true, _ => false }
+    }
+
+    /// Returns `true` if this value is a number.
+    export fun is_number(self): bool {
+        match self { Value::Number(_) => true, _ => false }
+    }
+
+    /// Returns `true` if this value is a string.
+    export fun is_string(self): bool {
+        match self { Value::Str(_) => true, _ => false }
+    }
+
+    /// Returns `true` if this value is an array.
+    export fun is_array(self): bool {
+        match self { Value::Array(_) => true, _ => false }
+    }
+
+    /// Returns `true` if this value is an object.
+    export fun is_object(self): bool {
+        match self { Value::Object(_) => true, _ => false }
+    }
+
+    /// Tries to extract the inner boolean.
+    export fun as_bool(self): Option<bool> {
+        match self { Value::Bool(b) => std::core::Option::Some(b), _ => std::core::Option::None }
+    }
+
+    /// Tries to extract the inner f64.
+    export fun as_f64(self): Option<f64> {
+        match self { Value::Number(n) => std::core::Option::Some(n), _ => std::core::Option::None }
+    }
+
+    /// Tries to extract the inner i64 (truncates fractional part).
+    export fun as_i64(self): Option<i64> {
+        match self { Value::Number(n) => std::core::Option::Some(n as i64), _ => std::core::Option::None }
+    }
+
+    /// Tries to extract the inner string.
+    export fun as_str(self): Option<&str> {
+        match self { Value::Str(s) => std::core::Option::Some(s.as_str()), _ => std::core::Option::None }
+    }
+
+    /// Indexes into an object by key.
+    export fun get(self, key: &str): Option<&Value> {
+        __builtin_json_get(self, key)
+    }
+
+    /// Indexes into an array by position.
+    export fun index(self, i: usize): Option<&Value> {
+        match self {
+            Value::Array(arr) => arr.get(i),
+            _ => Option::None,
+        }
+    }
+}
+
+// ─── Parse error ──────────────────────────────────────────────────────────────
+
+export struct ParseError {
+    export message: String,
+    export offset: usize,
+}
+
+extend ParseError {
+    export fun new(message: &str, offset: usize): ParseError {
+        ParseError { message: String::from(message), offset }
+    }
+}
+
+// ─── Parsing ──────────────────────────────────────────────────────────────────
+
+/// Parse a JSON string into a `Value`.
+///
+/// Supports the full RFC 8259 grammar:
+/// - `null`, `true`, `false`
+/// - Numbers (integer and floating-point, negative, exponent notation)
+/// - Strings with `\n`, `\t`, `\\`, `\"`, `\/`, `\b`, `\f`, `\uXXXX` escapes
+/// - Arrays and objects, arbitrarily nested
+///
+/// Returns `Err` with a message and byte offset on invalid input.
+export fun parse(input: &str): Result<Value, ParseError> {
+    __builtin_json_parse(input)
+}
+
+/// Parse a JSON string, returning `None` instead of an error on failure.
+export fun parse_opt(input: &str): Option<Value> {
+    match parse(input) {
+        Result::Ok(v) => Option::Some(v),
+        Result::Err(_) => Option::None,
+    }
+}
+
+// ─── Serialization ────────────────────────────────────────────────────────────
+
+/// Serialize a `Value` to a compact JSON string (no extra whitespace).
+export fun to_string(v: &Value): String {
+    __builtin_json_stringify(v)
+}
+
+/// Serialize a `Value` to a pretty-printed JSON string with 2-space indentation.
+export fun to_string_pretty(v: &Value): String {
+    todo!()
+}
+
+// ─── Convenience constructors ─────────────────────────────────────────────────
+
+/// Build a JSON object from key-value pairs.
+///
+/// ```dr
+/// let obj = json::object([
+///     ("name", json::Value::Str(String::from("Daram"))),
+///     ("version", json::Value::Number(1.0)),
+/// ]);
+/// ```
+export fun object(pairs: &[(&str, Value)]): Value {
+    const map = HashMap::new();
+    for (k, v) in pairs {
+        map.insert(String::from(k), v);
+    }
+    Value::Object(map)
+}
+
+/// Build a JSON array from a slice of values.
+export fun array(items: &[Value]): Value {
+    const arr = Vec::new();
+    for item in items {
+        arr.push(item);
+    }
+    Value::Array(arr)
+}
+
+/// Shorthand for `Value::Str`.
+export fun string(s: &str): Value { Value::Str(String::from(s)) }
+
+/// Shorthand for `Value::Number`.
+export fun number(n: f64): Value { Value::Number(n) }
+
+/// Shorthand for `Value::Bool`.
+export fun bool_val(b: bool): Value { Value::Bool(b) }
+
+/// Shorthand for `Value::Null`.
+export fun null(): Value { Value::Null }

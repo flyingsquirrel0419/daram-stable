@@ -1,0 +1,7 @@
+src/**
+tsconfig.json
+package-lock.json
+README.md
+!out/**
+!language-configuration.json
+!syntaxes/**
