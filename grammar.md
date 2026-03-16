@@ -4,6 +4,162 @@ This document describes the current source grammar accepted by the Daram lexer a
 
 It is written from the implementation, not from aspirational design notes. If this file disagrees with the parser, the parser wins.
 
+## Quick Tour
+
+If you just want to read Daram code without parsing the full formal grammar, start here.
+
+### 1. Functions look like this
+
+```daram
+fun add(a: i32, b: i32): i32 {
+    a + b
+}
+```
+
+- `fun` declares a function.
+- Parameters use `name: Type`.
+- The last expression can be the return value.
+- `fn` is also accepted, but `fun` is the preferred style.
+
+### 2. Variables and constants
+
+```daram
+let value = 10;
+const limit: i32 = 100;
+```
+
+- `let` creates a local binding.
+- `const` creates an immutable local or top-level constant.
+- Types can be written explicitly or inferred.
+
+### 3. Structs and enums
+
+```daram
+struct User {
+    name: string,
+    age: i32,
+}
+
+enum Option<T> {
+    Some(T),
+    None,
+}
+```
+
+- `struct` defines record-like data.
+- `enum` defines tagged variants.
+- Generics use `<T>`.
+
+### 4. Control flow
+
+```daram
+if score > 90 {
+    "A"
+} else {
+    "B"
+}
+```
+
+```daram
+match value {
+    0 => "zero",
+    1..=9 => "small",
+    _ => "many",
+}
+```
+
+- `if`, `while`, `for`, and `loop` all use block syntax.
+- `match` is the main pattern-matching form.
+
+### 5. Imports
+
+```daram
+import println from "std/io";
+import { read_file, write_file as write } from "std/fs";
+```
+
+- Modern Daram style uses `import ... from ...`.
+- Legacy `use foo::bar` syntax is still accepted.
+
+### 6. What the language feels like
+
+Daram reads roughly like this:
+
+- TypeScript-style surface readability
+- Rust-style type and ownership ambitions
+- Expression-oriented blocks and pattern matching
+- File-based modules instead of inline `mod { ... }`
+
+## Most Common Syntax
+
+These are the forms most people will hit first.
+
+### Functions
+
+```daram
+fun greet(name: string): string {
+    "Hello, " + name
+}
+```
+
+### Methods
+
+```daram
+extend User {
+    fun is_adult(self): bool {
+        self.age >= 18
+    }
+}
+```
+
+### Arrays and tuples
+
+```daram
+let numbers = [1, 2, 3];
+let pair = ("x", 10);
+```
+
+### Struct literals
+
+```daram
+let user = User {
+    name: "Ari",
+    age: 20,
+};
+```
+
+Shorthand field init is also accepted:
+
+```daram
+let user = User { name, age };
+```
+
+### References
+
+```daram
+fun inspect(value: &i32): i32 {
+    *value
+}
+```
+
+### Closures
+
+```daram
+let double = fun(x: i32): i32 {
+    x * 2
+};
+```
+
+### Defer
+
+```daram
+defer {
+    println("leaving scope");
+}
+```
+
+`defer` always runs at scope exit. `errdefer` only runs on error paths.
+
 ## Conventions
 
 - `A?` means "optional".

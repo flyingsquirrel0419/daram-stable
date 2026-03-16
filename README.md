@@ -46,6 +46,8 @@ cargo run -q -p dr -- --help
 
 Language grammar reference: [grammar.md](grammar.md)
 
+If you want the easy version first, read the `Quick Tour` section at the top of `grammar.md`.
+
 ## Install
 
 `dr` itself does not require Rust on the target machine. Install the prebuilt CLI from GitHub Releases:
@@ -79,6 +81,37 @@ dr --version
 ```
 
 Native `dr build` output may still require a system C toolchain such as `cc`, `clang`, or `gcc`.
+
+## Packages
+
+The default Daram package registry is:
+
+```text
+https://daram.flyingsquirrel.me
+```
+
+`dr add` updates `daram.toml`. `dr install` actually resolves and downloads packages.
+
+Try the package flow like this:
+
+```bash
+dr new sample-app
+cd sample-app
+dr add <package-name>@<version>
+dr install
+```
+
+If you want to force the registry explicitly:
+
+```bash
+DRPM_REGISTRY=https://daram.flyingsquirrel.me dr install
+```
+
+You can inspect the manifest with:
+
+```bash
+cat daram.toml
+```
 
 ## Development
 
