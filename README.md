@@ -44,6 +44,8 @@ Show the full CLI help with:
 cargo run -q -p dr -- --help
 ```
 
+Language grammar reference: [grammar.md](grammar.md)
+
 ## Install
 
 `dr` itself does not require Rust on the target machine. Install the prebuilt CLI from GitHub Releases:
