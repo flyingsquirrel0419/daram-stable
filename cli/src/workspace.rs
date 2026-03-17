@@ -105,7 +105,6 @@ fn default_main_source(name: &str) -> String {
 // Run with: dr run
 
 fun main() {{
-    println("Hello from {name}");
 }}
 "#,
         name = name,
@@ -135,7 +134,7 @@ mod tests {
     fn default_main_source_prints_visible_output() {
         let source = default_main_source("demo");
         assert!(source.contains("fun main() {"));
-        assert!(source.contains("println(\"Hello from demo\");"));
+        assert!(!source.contains("println("));
         assert!(!source.contains("0"));
     }
 }

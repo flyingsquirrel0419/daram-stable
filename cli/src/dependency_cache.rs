@@ -414,6 +414,12 @@ fn bundle_workspace_sources(
         .strip_prefix(&src_root)
         .ok()
         .map(|path| path.to_string_lossy().replace('\\', "/"));
+    if current_relative.is_none() {
+        return Ok(daram_compiler::stdlib_bundle::encode_source_bundle(&[(
+            "main.dr".to_string(),
+            strip_outer_attributes(current_source),
+        )]));
+    }
     let relative_files = collect_relative_dr_files(&src_root)?;
 
     let mut files = Vec::new();
@@ -992,6 +998,26 @@ mod tests {
             "diagnostics: {:?}",
             result.diagnostics
         );
+    }
+
+    #[test]
+    fn workspace_bundle_uses_explicit_source_file_outside_src_root() {
+        let root = temp_test_dir("workspace-external-file");
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(
+            root.join("src/main.dr"),
+            "fun main() {\n    println(\"Hello from app\");\n}\n",
+        )
+        .unwrap();
+
+        let external = root.join("hello.dr");
+        let source = "fun main() {\n    println(\"Hello user\");\n}\n";
+        fs::write(&external, source).unwrap();
+
+        let bundled = compose_workspace_source(&root, Some(&external), source, false).unwrap();
+
+        assert!(bundled.contains("Hello user"));
+        assert!(!bundled.contains("Hello from app"));
     }
 
     #[test]
