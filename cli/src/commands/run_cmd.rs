@@ -1,7 +1,8 @@
 //! `dr run [-- args…]` — build and run the current project.
 
-use crate::{commands::build, terminal, workspace::find_workspace};
-use std::process::Command;
+use crate::{commands::{build, exec_mir}, terminal, workspace::find_workspace};
+use daram_compiler::interpreter::Value;
+use std::{path::{Path, PathBuf}, process::Command};
 
 pub fn run(args: &[String]) -> i32 {
     // Split args at `--` to separate dr flags from program args.
@@ -12,6 +13,10 @@ pub fn run(args: &[String]) -> i32 {
             None => (args.to_vec(), Vec::new()),
         }
     };
+
+    if let Some(source_file) = source_file_arg(&dr_args) {
+        return run_source_file(&source_file, &prog_args);
+    }
 
     // Build first.
     let exit = build::run(&dr_args);
@@ -56,5 +61,62 @@ pub fn run(args: &[String]) -> i32 {
             terminal::error(&format!("failed to run binary: {}", e));
             1
         }
+    }
+}
+
+fn source_file_arg(args: &[String]) -> Option<PathBuf> {
+    if args.len() != 1 {
+        return None;
+    }
+
+    let candidate = Path::new(&args[0]);
+    if candidate.extension().and_then(|ext| ext.to_str()) != Some("dr") {
+        return None;
+    }
+
+    Some(candidate.to_path_buf())
+}
+
+fn run_source_file(path: &Path, prog_args: &[String]) -> i32 {
+    if !prog_args.is_empty() {
+        terminal::error("program arguments are not supported for `dr run <file>.dr` yet");
+        return 1;
+    }
+
+    terminal::step(&format!("running `{}`", path.display()));
+
+    match exec_mir::execute_source_function(path, "main") {
+        Ok(Value::Unit) => 0,
+        Ok(value) => {
+            println!("{}", value.render());
+            0
+        }
+        Err(message) => {
+            terminal::error(&message);
+            1
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::source_file_arg;
+    use std::path::PathBuf;
+
+    #[test]
+    fn detects_single_source_file_argument() {
+        assert_eq!(
+            source_file_arg(&["example.dr".to_string()]),
+            Some(PathBuf::from("example.dr"))
+        );
+    }
+
+    #[test]
+    fn ignores_non_source_arguments() {
+        assert_eq!(source_file_arg(&["--release".to_string()]), None);
+        assert_eq!(
+            source_file_arg(&["example.dr".to_string(), "--release".to_string()]),
+            None
+        );
     }
 }

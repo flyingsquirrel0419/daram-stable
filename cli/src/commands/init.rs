@@ -10,7 +10,15 @@ use crate::{
     workspace::create_project_skeleton,
 };
 
-pub fn run(_args: &[String]) -> i32 {
+const FALLBACK_PACKAGE_NAME: &str = "app";
+
+pub fn run(args: &[String]) -> i32 {
+    if !args.is_empty() {
+        terminal::error("usage: dr init");
+        terminal::info("`dr init` always initialises the current directory.");
+        return 1;
+    }
+
     let cwd = match env::current_dir() {
         Ok(d) => d,
         Err(e) => {
@@ -32,17 +40,12 @@ pub fn run(_args: &[String]) -> i32 {
         .unwrap_or("project")
         .to_string();
 
-    let name = sanitise_name(&dir_name);
-
-    if let Err(e) = validate_package_name(&name) {
-        terminal::error(&format!(
-            "directory name `{}` is not a valid package name: {}",
-            dir_name, e
+    let (name, used_fallback_name) = derive_package_name(&dir_name);
+    if used_fallback_name {
+        terminal::info(&format!(
+            "directory name `{}` cannot be used as a package name; using `{}` in daram.toml",
+            dir_name, name
         ));
-        terminal::info(
-            "Rename the directory or use `dr new <name>` to create a project with a specific name.",
-        );
-        return 1;
     }
 
     let manifest = Manifest {
@@ -83,6 +86,15 @@ pub fn run(_args: &[String]) -> i32 {
     0
 }
 
+fn derive_package_name(dir_name: &str) -> (String, bool) {
+    let sanitized = sanitise_name(dir_name);
+    if validate_package_name(&sanitized).is_ok() {
+        return (sanitized, false);
+    }
+
+    (FALLBACK_PACKAGE_NAME.to_string(), true)
+}
+
 /// Convert a directory name to a valid package name by replacing invalid
 /// characters with hyphens and lowercasing.
 fn sanitise_name(raw: &str) -> String {
@@ -97,4 +109,23 @@ fn sanitise_name(raw: &str) -> String {
         .collect::<String>()
         .trim_matches('-')
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::derive_package_name;
+
+    #[test]
+    fn uses_sanitized_directory_name_when_valid() {
+        let (name, used_fallback) = derive_package_name("Hello World");
+        assert_eq!(name, "hello-world");
+        assert!(!used_fallback);
+    }
+
+    #[test]
+    fn falls_back_for_non_ascii_directory_names() {
+        let (name, used_fallback) = derive_package_name("ㅇㄱ");
+        assert_eq!(name, "app");
+        assert!(used_fallback);
+    }
 }
