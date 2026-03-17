@@ -27,7 +27,7 @@ impl std::fmt::Display for WorkspaceError {
             WorkspaceError::NotFound => write!(
                 f,
                 "could not find `daram.toml` in the current directory or any parent directory\n\
-                 Hint: run `dr init` to initialise a new project here, or `dr new <name>` to create one."
+                 Hint: run `dr run` here to auto-initialise a runnable project, or `dr new <name>` to create one."
             ),
             WorkspaceError::Manifest(e) => write!(f, "error reading manifest: {}", e),
             WorkspaceError::Io(e) => write!(f, "I/O error: {}", e),
@@ -94,6 +94,30 @@ pub fn create_project_skeleton(dir: &Path, name: &str, lib: bool) -> Result<(), 
         .args(["init", "--quiet"])
         .current_dir(dir)
         .status();
+
+    Ok(())
+}
+
+/// Ensure the minimum runnable project scaffold exists without overwriting
+/// existing user files.
+pub fn ensure_runnable_project_skeleton(dir: &Path, name: &str) -> Result<(), io::Error> {
+    fs::create_dir_all(dir)?;
+    fs::create_dir_all(dir.join("src"))?;
+
+    let main_path = dir.join("src").join("main.dr");
+    if !main_path.exists() {
+        fs::write(main_path, default_main_source(name))?;
+    }
+
+    let lock_path = dir.join("dr.lock");
+    if !lock_path.exists() {
+        fs::write(lock_path, "")?;
+    }
+
+    let gitignore_path = dir.join(".gitignore");
+    if !gitignore_path.exists() {
+        fs::write(gitignore_path, "/target\n/dr.lock\n")?;
+    }
 
     Ok(())
 }

@@ -1,9 +1,9 @@
 //! `dr run [-- args…]` — build and run the current project.
 
 use crate::{
-    commands::{build, exec_mir},
+    commands::{build, exec_mir, init},
     terminal,
-    workspace::find_workspace,
+    workspace::{find_workspace, WorkspaceError},
 };
 use daram_compiler::interpreter::Value;
 use std::{
@@ -23,6 +23,20 @@ pub fn run(args: &[String]) -> i32 {
 
     if let Some(source_file) = source_file_arg(&dr_args) {
         return run_source_file(&source_file, &prog_args);
+    }
+
+    match find_workspace() {
+        Ok(_) => {}
+        Err(WorkspaceError::NotFound) => {
+            if let Err(message) = auto_initialise_current_directory() {
+                terminal::error(&message);
+                return 1;
+            }
+        }
+        Err(e) => {
+            terminal::error(&e.to_string());
+            return 1;
+        }
     }
 
     // Build first.
@@ -99,6 +113,25 @@ fn run_source_file(path: &Path, prog_args: &[String]) -> i32 {
             1
         }
     }
+}
+
+fn auto_initialise_current_directory() -> Result<(), String> {
+    let outcome = init::ensure_current_dir_project()?;
+
+    if outcome.used_fallback_name {
+        terminal::info(&format!(
+            "current directory name cannot be used as a package name; using `{}` in daram.toml",
+            outcome.name
+        ));
+    }
+    if outcome.created_manifest || outcome.created_main_source {
+        terminal::success(&format!(
+            "auto-initialised `{}` for `dr run`",
+            outcome.name
+        ));
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

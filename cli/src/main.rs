@@ -5,12 +5,11 @@
 //! ## Commands
 //! ```text
 //! dr new      Create a new project
-//! dr init     Initialise the current directory as a Daram project
 //! dr add      Add a dependency
 //! dr remove   Remove a dependency
 //! dr install  Install all dependencies listed in daram.toml
 //! dr build    Compile the current project
-//! dr run      Build and run the current project or a single .dr file
+//! dr run      Build and run the current project, auto-initialising if needed, or run a single .dr file
 //! dr test     Run the project's test suite
 //! dr bench    Run benchmarks
 //! dr fmt      Format source code
@@ -83,12 +82,11 @@ fn print_help() {
     println!();
     println!("Commands:");
     println!("  new      <name>     Create a new Daram project in a new directory");
-    println!("  init                Initialise the current directory as a Daram project");
     println!("  add      <pkg>      Add a dependency to daram.toml");
     println!("  remove   <pkg>      Remove a dependency from daram.toml");
     println!("  install             Install all dependencies");
     println!("  build               Compile the current project");
-    println!("  run      [file.dr]  Build and run the current project, or run a single .dr file");
+    println!("  run      [file.dr]  Build and run the current project, auto-initialising if needed, or run a single .dr file");
     println!("  test     [filter]   Run the test suite");
     println!("  bench    [filter]   Run benchmarks");
     println!("  fmt                 Format all source files (`--check`, `--verbose`, `--migrate-syntax`)");
