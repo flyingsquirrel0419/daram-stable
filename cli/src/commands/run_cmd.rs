@@ -93,11 +93,7 @@ fn run_source_file(path: &Path, prog_args: &[String]) -> i32 {
     terminal::step(&format!("running `{}`", path.display()));
 
     match exec_mir::execute_source_function(path, "main") {
-        Ok(Value::Unit) => 0,
-        Ok(value) => {
-            println!("{}", value.render());
-            0
-        }
+        Ok(Value::Unit) | Ok(_) => 0,
         Err(message) => {
             terminal::error(&message);
             1
