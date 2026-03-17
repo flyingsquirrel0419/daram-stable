@@ -125,10 +125,7 @@ fn auto_initialise_current_directory() -> Result<(), String> {
         ));
     }
     if outcome.created_manifest || outcome.created_main_source {
-        terminal::success(&format!(
-            "auto-initialised `{}` for `dr run`",
-            outcome.name
-        ));
+        terminal::success(&format!("auto-initialised `{}` for `dr run`", outcome.name));
     }
 
     Ok(())
