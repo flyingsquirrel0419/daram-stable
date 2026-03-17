@@ -27,11 +27,9 @@ pub fn run(args: &[String]) -> i32 {
         }
     };
 
-    // Refuse to overwrite an existing daram.toml.
-    if cwd.join("daram.toml").exists() {
-        terminal::error("`daram.toml` already exists in this directory");
-        return 1;
-    }
+    let is_reinitialising = cwd.join("daram.toml").exists()
+        || cwd.join("src").join("main.dr").exists()
+        || cwd.join("dr.lock").exists();
 
     // Derive package name from directory name.
     let dir_name = cwd
@@ -69,12 +67,9 @@ pub fn run(args: &[String]) -> i32 {
         doc: DocConfig::default(),
     };
 
-    // Create src/ and default source file if they don't exist.
-    if !cwd.join("src").exists() {
-        if let Err(e) = create_project_skeleton(&cwd, &name, false) {
-            terminal::error(&format!("failed to create project skeleton: {}", e));
-            return 1;
-        }
+    if let Err(e) = create_project_skeleton(&cwd, &name, false) {
+        terminal::error(&format!("failed to create project skeleton: {}", e));
+        return 1;
     }
 
     if let Err(e) = manifest.write_to_dir(&cwd) {
@@ -82,7 +77,12 @@ pub fn run(args: &[String]) -> i32 {
         return 1;
     }
 
-    terminal::success(&format!("initialised `{}` in current directory", name));
+    let action = if is_reinitialising {
+        "reinitialised"
+    } else {
+        "initialised"
+    };
+    terminal::success(&format!("{} `{}` in current directory", action, name));
     0
 }
 
