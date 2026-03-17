@@ -2,8 +2,8 @@
 set -eu
 
 REPO="${DR_REPO:-flyingsquirrel0419/daram-stable}"
-INSTALL_DIR="${DR_INSTALL_DIR:-$HOME/.local/bin}"
 REQUESTED_VERSION="${DR_VERSION:-}"
+REQUESTED_INSTALL_DIR="${DR_INSTALL_DIR:-}"
 
 log() {
   printf '[daram-install] %s\n' "$*"
@@ -109,6 +109,92 @@ verify_checksum() {
   [ "$expected" = "$actual" ] || fail "checksum mismatch for $asset_name"
 }
 
+path_contains_dir() {
+  dir="$1"
+  case ":$PATH:" in
+    *":$dir:"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+ensure_dir() {
+  dir="$1"
+  if [ -d "$dir" ]; then
+    [ -w "$dir" ]
+    return
+  fi
+
+  mkdir -p "$dir" 2>/dev/null || return 1
+  [ -w "$dir" ]
+}
+
+choose_install_dir() {
+  if [ -n "$REQUESTED_INSTALL_DIR" ]; then
+    printf '%s' "$REQUESTED_INSTALL_DIR"
+    return
+  fi
+
+  for candidate in "$HOME/.local/bin" "$HOME/bin" "$HOME/.cargo/bin" "/usr/local/bin"; do
+    if path_contains_dir "$candidate" && ensure_dir "$candidate"; then
+      printf '%s' "$candidate"
+      return
+    fi
+  done
+
+  printf '%s' "$HOME/.local/bin"
+}
+
+profile_targets() {
+  shell_name="${SHELL##*/}"
+  if [ -z "$shell_name" ]; then
+    shell_name="sh"
+  fi
+
+  printf '%s\n' "$HOME/.profile"
+
+  if [ "$shell_name" = "bash" ] || [ -f "$HOME/.bashrc" ]; then
+    printf '%s\n' "$HOME/.bashrc"
+  fi
+  if [ -f "$HOME/.bash_profile" ]; then
+    printf '%s\n' "$HOME/.bash_profile"
+  elif [ -f "$HOME/.bash_login" ]; then
+    printf '%s\n' "$HOME/.bash_login"
+  elif [ "$shell_name" = "bash" ]; then
+    printf '%s\n' "$HOME/.bash_profile"
+  fi
+  if [ "$shell_name" = "zsh" ] || [ -f "$HOME/.zshrc" ]; then
+    printf '%s\n' "$HOME/.zshrc"
+  fi
+  if [ -f "$HOME/.zprofile" ] || [ "$shell_name" = "zsh" ]; then
+    printf '%s\n' "$HOME/.zprofile"
+  fi
+}
+
+persist_path_update() {
+  install_dir="$1"
+  export_line="export PATH=\"$install_dir:\$PATH\""
+  added_profiles=""
+
+  for profile in $(profile_targets); do
+    [ -n "$profile" ] || continue
+    if [ -f "$profile" ] && grep -F "$export_line" "$profile" >/dev/null 2>&1; then
+      continue
+    fi
+
+    {
+      printf '\n# added by daram installer\n'
+      printf '%s\n' "$export_line"
+    } >> "$profile" || fail "failed to update shell profile: $profile"
+    if [ -z "$added_profiles" ]; then
+      added_profiles="$profile"
+    else
+      added_profiles="$added_profiles, $profile"
+    fi
+  done
+
+  printf '%s' "$added_profiles"
+}
+
 main() {
   need_cmd curl
   need_cmd tar
@@ -123,6 +209,7 @@ main() {
   need_cmd sed
   need_cmd tr
 
+  INSTALL_DIR="$(choose_install_dir)"
   target="$(detect_target)"
   tag="$(resolve_tag "$REQUESTED_VERSION")"
   version="$(asset_version "$tag")"
@@ -150,14 +237,22 @@ main() {
   chmod +x "$install_path"
 
   log "installed dr to $install_path"
-  case ":$PATH:" in
-    *":$INSTALL_DIR:"*)
-      log "run 'dr --version' to verify the installation"
-      ;;
-    *)
-      log "add $INSTALL_DIR to PATH, then run 'dr --version'"
-      ;;
-  esac
+  if version_output="$("$install_path" --version 2>&1)"; then
+    log "verified binary: $version_output"
+  else
+    fail "installed binary failed to execute: $version_output"
+  fi
+
+  if path_contains_dir "$INSTALL_DIR"; then
+    log "run 'dr --version' to verify the installation"
+  else
+    updated_profiles="$(persist_path_update "$INSTALL_DIR")"
+    if [ -n "$updated_profiles" ]; then
+      log "added $INSTALL_DIR to your shell profiles: $updated_profiles"
+    fi
+    log "restart your shell, or run: export PATH=\"$INSTALL_DIR:\$PATH\""
+    log "then run 'dr --version'"
+  fi
   log "Rust is not required to use dr; native builds may require a system C compiler"
 }
 

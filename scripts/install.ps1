@@ -124,6 +124,7 @@ try {
     }
 
     $pathEntries = $userPath -split ';' | Where-Object { $_ }
+    $pathChanged = $false
     if ($pathEntries -notcontains $InstallDir) {
         $newPath = if ([string]::IsNullOrWhiteSpace($userPath)) {
             $InstallDir
@@ -132,13 +133,28 @@ try {
         }
 
         [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
-        Write-Log "Installed dr to $binaryPath"
-        Write-Log "Added $InstallDir to your user PATH. Open a new terminal and run 'dr --version'"
-    } else {
-        Write-Log "Installed dr to $binaryPath"
-        Write-Log "Run 'dr --version' to verify the installation"
+        $pathChanged = $true
     }
 
+    $sessionEntries = $env:Path -split ';' | Where-Object { $_ }
+    if ($sessionEntries -notcontains $InstallDir) {
+        $env:Path = if ([string]::IsNullOrWhiteSpace($env:Path)) {
+            $InstallDir
+        } else {
+            "$InstallDir;$env:Path"
+        }
+    }
+
+    Write-Log "Installed dr to $binaryPath"
+    $versionOutput = & $binaryPath --version
+    if ($versionOutput) {
+        Write-Log "Verified binary: $versionOutput"
+    }
+
+    if ($pathChanged) {
+        Write-Log "Added $InstallDir to your user PATH and updated the current PowerShell session"
+    }
+    Write-Log "Run 'dr --version' to verify the installation"
     Write-Log 'Rust is not required to use dr; native builds may require a system C compiler'
 }
 finally {
