@@ -247,6 +247,15 @@ pub fn compose_workspace_source(
     Ok(daram_compiler::stdlib_bundle::with_bundled_prelude(&merged))
 }
 
+pub fn compose_standalone_source(current_file: &Path, source: &str) -> Result<String, String> {
+    let source_root = current_file
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let bundled = bundle_source_tree(source_root, current_file, source, Some("main.dr"))?;
+    Ok(daram_compiler::stdlib_bundle::with_bundled_prelude(&bundled))
+}
+
 pub fn dependency_source_bundle(
     workspace_root: &Path,
     include_dev_dependencies: bool,
@@ -398,43 +407,145 @@ fn bundle_workspace_sources(
 ) -> Result<String, String> {
     let src_root = workspace_root.join("src");
     if !src_root.is_dir() {
-        return Ok(daram_compiler::stdlib_bundle::encode_source_bundle(&[(
-            "main.dr".to_string(),
-            strip_outer_attributes(current_source),
-        )]));
+        return bundle_single_source("main.dr", current_source);
     }
 
     let Some(current_file) = current_file else {
-        return Ok(daram_compiler::stdlib_bundle::encode_source_bundle(&[(
-            "main.dr".to_string(),
-            strip_outer_attributes(current_source),
-        )]));
+        return bundle_single_source("main.dr", current_source);
     };
     let current_relative = current_file
         .strip_prefix(&src_root)
         .ok()
         .map(|path| path.to_string_lossy().replace('\\', "/"));
     if current_relative.is_none() {
-        return Ok(daram_compiler::stdlib_bundle::encode_source_bundle(&[(
-            "main.dr".to_string(),
-            strip_outer_attributes(current_source),
-        )]));
+        return bundle_source_tree(
+            current_file.parent().unwrap_or_else(|| Path::new(".")),
+            current_file,
+            current_source,
+            Some("main.dr"),
+        );
     }
-    let relative_files = collect_relative_dr_files(&src_root)?;
+    bundle_source_tree(&src_root, current_file, current_source, None)
+}
+
+fn bundle_single_source(entry_name: &str, source: &str) -> Result<String, String> {
+    Ok(daram_compiler::stdlib_bundle::encode_source_bundle(&[(
+        entry_name.to_string(),
+        strip_outer_attributes(source),
+    )]))
+}
+
+fn bundle_source_tree(
+    source_root: &Path,
+    current_file: &Path,
+    current_source: &str,
+    current_bundle_path: Option<&str>,
+) -> Result<String, String> {
+    let current_relative = current_file
+        .strip_prefix(source_root)
+        .ok()
+        .map(|path| path.to_string_lossy().replace('\\', "/"));
+    let Some(current_relative) = current_relative else {
+        let entry_name = current_file
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("main.dr");
+        return bundle_single_source(entry_name, current_source);
+    };
+    let bundled_current_relative = current_bundle_path.unwrap_or(&current_relative).to_string();
+
+    let relative_files = reachable_relative_files(source_root, &current_relative, current_source)?;
+    if relative_files.is_empty() {
+        return bundle_single_source(&bundled_current_relative, current_source);
+    }
 
     let mut files = Vec::new();
+    let mut current_file_entry = None;
     for relative_path in relative_files {
-        let source = if current_relative.as_deref() == Some(relative_path.as_str()) {
+        let source = if current_relative == relative_path {
             current_source.to_string()
         } else {
-            fs::read_to_string(src_root.join(&relative_path))
+            fs::read_to_string(source_root.join(&relative_path))
                 .map_err(|e| format!("failed to read `{}`: {}", relative_path, e))?
         };
-        let rewritten = rewrite_workspace_source(&strip_outer_attributes(&source), &relative_path);
-        files.push((relative_path, rewritten));
+        let bundled_path = if current_relative == relative_path {
+            bundled_current_relative.clone()
+        } else {
+            relative_path.clone()
+        };
+        let rewrite_relative = if current_relative == relative_path {
+            bundled_current_relative.as_str()
+        } else {
+            relative_path.as_str()
+        };
+        let rewritten = rewrite_workspace_source(&strip_outer_attributes(&source), rewrite_relative);
+        if current_relative == relative_path {
+            current_file_entry = Some((bundled_path, rewritten));
+        } else {
+            files.push((bundled_path, rewritten));
+        }
+    }
+
+    if let Some(current_file_entry) = current_file_entry {
+        files.insert(0, current_file_entry);
+    } else {
+        files.insert(
+            0,
+            (
+                bundled_current_relative.clone(),
+                rewrite_workspace_source(
+                    &strip_outer_attributes(current_source),
+                    &bundled_current_relative,
+                ),
+            ),
+        );
     }
 
     Ok(daram_compiler::stdlib_bundle::encode_source_bundle(&files))
+}
+
+fn reachable_relative_files(
+    source_root: &Path,
+    current_relative: &str,
+    current_source: &str,
+) -> Result<Vec<String>, String> {
+    let all_relative_files = collect_relative_dr_files(source_root)?;
+    if all_relative_files.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let known = all_relative_files
+        .iter()
+        .cloned()
+        .collect::<HashSet<_>>();
+    let mut ordered = Vec::new();
+    let mut queue = vec![current_relative.to_string()];
+    let mut visited = HashSet::new();
+
+    while let Some(relative_path) = queue.pop() {
+        if !visited.insert(relative_path.clone()) {
+            continue;
+        }
+        ordered.push(relative_path.clone());
+
+        let source = if relative_path == current_relative {
+            current_source.to_string()
+        } else {
+            fs::read_to_string(source_root.join(&relative_path))
+                .map_err(|e| format!("failed to read `{}`: {}", relative_path, e))?
+        };
+
+        for import in extract_import_sources(&source) {
+            if let Some(import_path) =
+                resolve_relative_import_path(&relative_path, &import, &known)
+            {
+                queue.push(import_path);
+            }
+        }
+    }
+
+    ordered.sort();
+    Ok(ordered)
 }
 
 fn rewrite_workspace_source(source: &str, relative_path: &str) -> String {
@@ -600,6 +711,90 @@ fn rewrite_import_sources(source: &str, current_dir: &[String]) -> String {
     out
 }
 
+fn extract_import_sources(source: &str) -> Vec<String> {
+    let bytes = source.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    let mut expect_import_source = false;
+    let mut block_depth = 0usize;
+
+    while i < bytes.len() {
+        if block_depth > 0 {
+            if bytes[i..].starts_with(b"/*") {
+                block_depth += 1;
+                i += 2;
+            } else if bytes[i..].starts_with(b"*/") {
+                block_depth -= 1;
+                i += 2;
+            } else {
+                i += 1;
+            }
+            continue;
+        }
+
+        if bytes[i..].starts_with(b"//") {
+            while i < bytes.len() {
+                let ch = bytes[i] as char;
+                i += 1;
+                if ch == '\n' {
+                    break;
+                }
+            }
+            continue;
+        }
+
+        if bytes[i..].starts_with(b"/*") {
+            block_depth = 1;
+            i += 2;
+            continue;
+        }
+
+        if bytes[i] == b'"' {
+            let start = i;
+            i += 1;
+            while i < bytes.len() {
+                if bytes[i] == b'\\' {
+                    i += 2;
+                    continue;
+                }
+                if bytes[i] == b'"' {
+                    i += 1;
+                    break;
+                }
+                i += 1;
+            }
+            if expect_import_source && i > start + 1 {
+                out.push(source[start + 1..i - 1].to_string());
+                expect_import_source = false;
+            }
+            continue;
+        }
+
+        let ch = bytes[i] as char;
+        if is_ident_start(ch) {
+            let start = i;
+            i += 1;
+            while i < bytes.len() && is_ident_continue(bytes[i] as char) {
+                i += 1;
+            }
+            let ident = &source[start..i];
+            if ident == "from" {
+                expect_import_source = true;
+            } else if expect_import_source {
+                expect_import_source = false;
+            }
+            continue;
+        }
+
+        if expect_import_source && !ch.is_whitespace() {
+            expect_import_source = false;
+        }
+        i += 1;
+    }
+
+    out
+}
+
 fn canonicalize_import_source(raw: &str, current_dir: &[String]) -> String {
     if raw.starts_with("./") || raw.starts_with("../") {
         let mut segments = current_dir.to_vec();
@@ -636,6 +831,44 @@ fn canonicalize_import_source(raw: &str, current_dir: &[String]) -> String {
         segments.pop();
     }
     segments.join("/")
+}
+
+fn resolve_relative_import_path(
+    current_relative: &str,
+    raw: &str,
+    known: &HashSet<String>,
+) -> Option<String> {
+    if !(raw.starts_with("./") || raw.starts_with("../")) {
+        return None;
+    }
+
+    let mut segments = current_relative
+        .replace('\\', "/")
+        .split('/')
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    if !segments.is_empty() {
+        segments.pop();
+    }
+
+    for part in raw.replace('\\', "/").split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                segments.pop();
+            }
+            value => segments.push(value.trim_end_matches(".dr").to_string()),
+        }
+    }
+
+    if segments.is_empty() {
+        return None;
+    }
+
+    let base = segments.join("/");
+    [format!("{base}.dr"), format!("{base}/mod.dr")]
+        .into_iter()
+        .find(|candidate| known.contains(candidate))
 }
 
 fn escape_string_literal(value: &str) -> String {
@@ -1018,6 +1251,75 @@ mod tests {
 
         assert!(bundled.contains("Hello user"));
         assert!(!bundled.contains("Hello from app"));
+    }
+
+    #[test]
+    fn workspace_bundle_resolves_relative_imports_for_external_file() {
+        let root = temp_test_dir("workspace-external-relative-import");
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("src/main.dr"), "fun main() {}\n").unwrap();
+
+        let external = root.join("hello.dr");
+        fs::write(
+            &external,
+            "import { answer } from \"./helper\";\nfun main(): i32 { answer() }\n",
+        )
+        .unwrap();
+        fs::write(root.join("helper.dr"), "export fun answer(): i32 { 42 }\n").unwrap();
+
+        let source = fs::read_to_string(&external).unwrap();
+        let bundled = compose_workspace_source(&root, Some(&external), &source, false).unwrap();
+        let result = compile(&bundled, "hello.dr");
+
+        assert!(
+            !result.has_errors(),
+            "diagnostics: {:?}",
+            result.diagnostics
+        );
+    }
+
+    #[test]
+    fn standalone_bundle_resolves_relative_imports_from_current_directory() {
+        let root = temp_test_dir("standalone-relative-import");
+        let main_path = root.join("main.dr");
+        fs::write(
+            &main_path,
+            "import { answer } from \"./helper\";\nfun main(): i32 { answer() }\n",
+        )
+        .unwrap();
+        fs::write(root.join("helper.dr"), "export fun answer(): i32 { 42 }\n").unwrap();
+
+        let source = fs::read_to_string(&main_path).unwrap();
+        let bundled = compose_standalone_source(&main_path, &source).unwrap();
+        let result = compile(&bundled, "main.dr");
+
+        assert!(
+            !result.has_errors(),
+            "diagnostics: {:?}",
+            result.diagnostics
+        );
+    }
+
+    #[test]
+    fn standalone_bundle_resolves_relative_imports_for_printing_call_sites() {
+        let root = temp_test_dir("standalone-relative-import-print");
+        let main_path = root.join("hello.dr");
+        fs::write(
+            &main_path,
+            "import { answer } from \"./helper\";\nfun main() {\n    println(answer());\n}\n",
+        )
+        .unwrap();
+        fs::write(root.join("helper.dr"), "export fun answer(): i32 { 42 }\n").unwrap();
+
+        let source = fs::read_to_string(&main_path).unwrap();
+        let bundled = compose_standalone_source(&main_path, &source).unwrap();
+        let result = compile(&bundled, "main.dr");
+
+        assert!(
+            !result.has_errors(),
+            "diagnostics: {:?}",
+            result.diagnostics
+        );
     }
 
     #[test]

@@ -7,7 +7,7 @@
 
 ## Placeholder Packages
 
-These packages currently expose only a minimal `package_name()` function:
+Most packages here still expose only a minimal `package_name()` function:
 
 - `daram-cli`
 - `daram-db`
@@ -15,7 +15,7 @@ These packages currently expose only a minimal `package_name()` function:
 - `daram-serde`
 - `daram-test`
 
-They are versioned with the repository, but they should be treated as stubs until their APIs are expanded.
+The rest are versioned with the repository, but they should be treated as stubs until their APIs are expanded.
 
 ## VS Code Extension
 

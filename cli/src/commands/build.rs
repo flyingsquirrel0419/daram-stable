@@ -105,43 +105,17 @@ pub fn run(args: &[String]) -> i32 {
     );
     if native_target {
         if let Err(e) = build_native_artifact(&ws.root, &entry_source, &binary_path, release) {
-            terminal::error(&format!("failed to build native artifact: {}", e));
-            return 1;
+            let _ = e;
+            terminal::warn("native backend unavailable, falling back to interpreter launcher");
+            if let Err(e) = write_exec_mir_launcher(&entry_source, &binary_path) {
+                terminal::error(&format!("failed to write interpreter launcher: {}", e));
+                return 1;
+            }
         }
     } else {
-        let dr_exe = match std::env::current_exe() {
-            Ok(path) => path,
-            Err(e) => {
-                terminal::error(&format!("failed to locate current executable: {}", e));
-                return 1;
-            }
-        };
-        let script = if cfg!(windows) {
-            format!(
-                "@echo off\r\n\"{}\" __exec-mir \"{}\" main %*\r\n",
-                dr_exe.display(),
-                entry_source.display(),
-            )
-        } else {
-            format!(
-                "#!/usr/bin/env bash\nexec \"{}\" __exec-mir \"{}\" main \"$@\"\n",
-                dr_exe.display(),
-                entry_source.display(),
-            )
-        };
-
-        if let Err(e) = fs::write(&binary_path, script) {
+        if let Err(e) = write_exec_mir_launcher(&entry_source, &binary_path) {
             terminal::error(&format!("failed to write build artifact: {}", e));
             return 1;
-        }
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            if let Err(e) = fs::set_permissions(&binary_path, fs::Permissions::from_mode(0o755)) {
-                terminal::error(&format!("failed to mark build artifact executable: {}", e));
-                return 1;
-            }
         }
     }
 
@@ -219,6 +193,36 @@ fn compile_dir(
             }
         }
     }
+    Ok(())
+}
+
+fn write_exec_mir_launcher(entry_source: &Path, output_path: &Path) -> Result<(), String> {
+    let dr_exe =
+        std::env::current_exe().map_err(|e| format!("failed to locate current executable: {}", e))?;
+    let script = if cfg!(windows) {
+        format!(
+            "@echo off\r\n\"{}\" __exec-mir \"{}\" main %*\r\n",
+            dr_exe.display(),
+            entry_source.display(),
+        )
+    } else {
+        format!(
+            "#!/usr/bin/env bash\nexec \"{}\" __exec-mir \"{}\" main \"$@\"\n",
+            dr_exe.display(),
+            entry_source.display(),
+        )
+    };
+
+    fs::write(output_path, script)
+        .map_err(|e| format!("failed to write build artifact: {}", e))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(output_path, fs::Permissions::from_mode(0o755))
+            .map_err(|e| format!("failed to mark build artifact executable: {}", e))?;
+    }
+
     Ok(())
 }
 
