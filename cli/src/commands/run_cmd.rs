@@ -1,8 +1,15 @@
 //! `dr run [-- args…]` — build and run the current project.
 
-use crate::{commands::{build, exec_mir}, terminal, workspace::find_workspace};
+use crate::{
+    commands::{build, exec_mir},
+    terminal,
+    workspace::find_workspace,
+};
 use daram_compiler::interpreter::Value;
-use std::{path::{Path, PathBuf}, process::Command};
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 pub fn run(args: &[String]) -> i32 {
     // Split args at `--` to separate dr flags from program args.
