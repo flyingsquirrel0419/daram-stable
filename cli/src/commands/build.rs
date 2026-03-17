@@ -197,8 +197,8 @@ fn compile_dir(
 }
 
 fn write_exec_mir_launcher(entry_source: &Path, output_path: &Path) -> Result<(), String> {
-    let dr_exe =
-        std::env::current_exe().map_err(|e| format!("failed to locate current executable: {}", e))?;
+    let dr_exe = std::env::current_exe()
+        .map_err(|e| format!("failed to locate current executable: {}", e))?;
     let script = if cfg!(windows) {
         format!(
             "@echo off\r\n\"{}\" __exec-mir \"{}\" main %*\r\n",
@@ -213,8 +213,7 @@ fn write_exec_mir_launcher(entry_source: &Path, output_path: &Path) -> Result<()
         )
     };
 
-    fs::write(output_path, script)
-        .map_err(|e| format!("failed to write build artifact: {}", e))?;
+    fs::write(output_path, script).map_err(|e| format!("failed to write build artifact: {}", e))?;
 
     #[cfg(unix)]
     {

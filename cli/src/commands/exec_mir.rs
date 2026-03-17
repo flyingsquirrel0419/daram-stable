@@ -4,7 +4,10 @@ use daram_compiler::{
     diagnostics::{Level, Renderer},
     interpreter::{self, Value},
 };
-use std::{fs, path::{Path, PathBuf}};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 pub fn execute_source_function(path: &Path, function_name: &str) -> Result<Value, String> {
     execute_source_function_with_options(path, function_name, false)
@@ -25,10 +28,10 @@ pub fn execute_source_function_with_options(
     let (bundled, file_name) = match workspace_root {
         Some(root) => (
             dependency_cache::compose_workspace_source(
-            &root,
-            Some(&canonical_path),
-            &source,
-            include_dev_dependencies,
+                &root,
+                Some(&canonical_path),
+                &source,
+                include_dev_dependencies,
             )?,
             canonical_path.to_string_lossy().to_string(),
         ),
@@ -94,7 +97,11 @@ pub fn run_internal(args: &[String]) -> i32 {
 mod tests {
     use super::execute_source_function;
     use daram_compiler::interpreter::Value;
-    use std::{fs, path::PathBuf, time::{SystemTime, UNIX_EPOCH}};
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     #[test]
     fn executes_standalone_file_with_relative_imports() {

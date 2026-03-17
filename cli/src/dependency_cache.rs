@@ -253,7 +253,9 @@ pub fn compose_standalone_source(current_file: &Path, source: &str) -> Result<St
         .filter(|path| !path.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
     let bundled = bundle_source_tree(source_root, current_file, source, Some("main.dr"))?;
-    Ok(daram_compiler::stdlib_bundle::with_bundled_prelude(&bundled))
+    Ok(daram_compiler::stdlib_bundle::with_bundled_prelude(
+        &bundled,
+    ))
 }
 
 pub fn dependency_source_bundle(
@@ -478,7 +480,8 @@ fn bundle_source_tree(
         } else {
             relative_path.as_str()
         };
-        let rewritten = rewrite_workspace_source(&strip_outer_attributes(&source), rewrite_relative);
+        let rewritten =
+            rewrite_workspace_source(&strip_outer_attributes(&source), rewrite_relative);
         if current_relative == relative_path {
             current_file_entry = Some((bundled_path, rewritten));
         } else {
@@ -514,10 +517,7 @@ fn reachable_relative_files(
         return Ok(Vec::new());
     }
 
-    let known = all_relative_files
-        .iter()
-        .cloned()
-        .collect::<HashSet<_>>();
+    let known = all_relative_files.iter().cloned().collect::<HashSet<_>>();
     let mut ordered = Vec::new();
     let mut queue = vec![current_relative.to_string()];
     let mut visited = HashSet::new();
@@ -536,8 +536,7 @@ fn reachable_relative_files(
         };
 
         for import in extract_import_sources(&source) {
-            if let Some(import_path) =
-                resolve_relative_import_path(&relative_path, &import, &known)
+            if let Some(import_path) = resolve_relative_import_path(&relative_path, &import, &known)
             {
                 queue.push(import_path);
             }
