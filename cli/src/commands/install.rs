@@ -8,6 +8,7 @@ use std::{
 };
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use ed25519_dalek::{pkcs8::DecodePublicKey, Signature, VerifyingKey};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
@@ -340,7 +341,7 @@ fn verify_signature(resolved: &ResolvedPackage) -> Result<(), String> {
         return verify_signature_with_command(&command, resolved, &payload_base64);
     }
     if let Some(public_key_pem) = trusted_signing_public_key_pem(resolved) {
-        return verify_signature_with_openssl(&public_key_pem, resolved, &payload);
+        return verify_signature_with_public_key(&public_key_pem, resolved, &payload);
     }
     Err(
         "signature verification is required; configure DRPM_VERIFY_COMMAND or DRPM_TRUSTED_SIGNING_PUBLIC_KEY_PEM"
@@ -422,6 +423,61 @@ fn verify_signature_with_command(
     } else {
         Err(format!("signature verification failed: {}", stderr))
     }
+}
+
+fn verify_signature_with_public_key(
+    public_key_pem: &str,
+    resolved: &ResolvedPackage,
+    payload: &[u8],
+) -> Result<(), String> {
+    match verify_signature_with_ed25519(public_key_pem, resolved, payload) {
+        Ok(()) => return Ok(()),
+        Err(ed25519_error) => {
+            match verify_signature_with_openssl(public_key_pem, resolved, payload) {
+                Ok(()) => return Ok(()),
+                Err(openssl_error) => {
+                    return Err(format!(
+                        "{}; fallback openssl verification also failed: {}",
+                        ed25519_error, openssl_error
+                    ));
+                }
+            }
+        }
+    }
+}
+
+fn verify_signature_with_ed25519(
+    public_key_pem: &str,
+    resolved: &ResolvedPackage,
+    payload: &[u8],
+) -> Result<(), String> {
+    let signature = BASE64
+        .decode(resolved.signature.as_bytes())
+        .map_err(|e| format!("invalid base64 signature: {}", e))?;
+    let public_key_der = pem_public_key_to_der(public_key_pem)?;
+    let verifying_key = VerifyingKey::from_public_key_der(&public_key_der)
+        .map_err(|e| format!("failed to parse trusted public key: {}", e))?;
+    let signature = Signature::try_from(signature.as_slice())
+        .map_err(|e| format!("invalid signature bytes: {}", e))?;
+    verifying_key
+        .verify_strict(payload, &signature)
+        .map_err(|e| format!("signature verification failed: {}", e))
+}
+
+fn pem_public_key_to_der(public_key_pem: &str) -> Result<Vec<u8>, String> {
+    let body = public_key_pem
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .filter(|line| !line.starts_with("-----BEGIN "))
+        .filter(|line| !line.starts_with("-----END "))
+        .collect::<String>();
+    if body.is_empty() {
+        return Err("trusted public key PEM is empty".to_string());
+    }
+    BASE64
+        .decode(body.as_bytes())
+        .map_err(|e| format!("trusted public key PEM is invalid base64: {}", e))
 }
 
 fn verify_signature_with_openssl(
