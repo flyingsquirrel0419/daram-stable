@@ -67,11 +67,11 @@ powershell -ExecutionPolicy Bypass -Command "irm https://github.com/flyingsquirr
 Version-pinned install:
 
 ```bash
-curl -fsSL https://github.com/flyingsquirrel0419/daram-stable/releases/latest/download/install.sh | env DR_VERSION=1.0.0 sh
+curl -fsSL https://github.com/flyingsquirrel0419/daram-stable/releases/latest/download/install.sh | env DR_VERSION=1.0.2 sh
 ```
 
 ```powershell
-$env:DR_VERSION='1.0.0'; irm https://github.com/flyingsquirrel0419/daram-stable/releases/latest/download/install.ps1 | iex
+$env:DR_VERSION='1.0.2'; irm https://github.com/flyingsquirrel0419/daram-stable/releases/latest/download/install.ps1 | iex
 ```
 
 After installation, verify with:
@@ -90,7 +90,7 @@ The default Daram package registry is:
 https://daram.flyingsquirrel.me
 ```
 
-`dr add` updates `daram.toml`. `dr install` actually resolves and downloads packages.
+`dr add` updates `daram.toml`. `dr install` resolves and downloads packages, and `dr install <package>@<version>` will add the package to `daram.toml` before installing.
 
 Try the package flow like this:
 
@@ -99,6 +99,12 @@ dr new sample-app
 cd sample-app
 dr add <package-name>@<version>
 dr install
+```
+
+Or in one step:
+
+```bash
+dr install <package-name>@<version>
 ```
 
 If you want to force the registry explicitly:

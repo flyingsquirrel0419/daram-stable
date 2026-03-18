@@ -4,6 +4,9 @@ set -eu
 REPO="${DR_REPO:-flyingsquirrel0419/daram-stable}"
 REQUESTED_VERSION="${DR_VERSION:-}"
 REQUESTED_INSTALL_DIR="${DR_INSTALL_DIR:-}"
+TRUSTED_SIGNING_KEY_ID="${DRPM_TRUSTED_SIGNING_KEY_ID:-local-dev}"
+DEFAULT_TRUSTED_SIGNING_PUBLIC_KEY_PEM='-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA6yOVMh5UY+KH9Y5Y/Tu2i93a2Lmdsn8/+odW8qCPs8w=\n-----END PUBLIC KEY-----'
+TRUSTED_SIGNING_PUBLIC_KEY_PEM="${DRPM_TRUSTED_SIGNING_PUBLIC_KEY_PEM:-$DEFAULT_TRUSTED_SIGNING_PUBLIC_KEY_PEM}"
 
 log() {
   printf '[daram-install] %s\n' "$*"
@@ -195,6 +198,37 @@ persist_path_update() {
   printf '%s' "$added_profiles"
 }
 
+persist_registry_trust() {
+  key_id_line="export DRPM_TRUSTED_SIGNING_KEY_ID=\"$TRUSTED_SIGNING_KEY_ID\""
+  key_pem_line="export DRPM_TRUSTED_SIGNING_PUBLIC_KEY_PEM=\"$TRUSTED_SIGNING_PUBLIC_KEY_PEM\""
+  added_profiles=""
+
+  for profile in $(profile_targets); do
+    [ -n "$profile" ] || continue
+    needs_update=0
+    if [ ! -f "$profile" ] || ! grep -F "$key_id_line" "$profile" >/dev/null 2>&1; then
+      needs_update=1
+    fi
+    if [ ! -f "$profile" ] || ! grep -F "DRPM_TRUSTED_SIGNING_PUBLIC_KEY_PEM=" "$profile" >/dev/null 2>&1; then
+      needs_update=1
+    fi
+    [ "$needs_update" -eq 1 ] || continue
+
+    {
+      printf '\n# added by daram installer\n'
+      printf '%s\n' "$key_id_line"
+      printf '%s\n' "$key_pem_line"
+    } >> "$profile" || fail "failed to update shell profile: $profile"
+    if [ -z "$added_profiles" ]; then
+      added_profiles="$profile"
+    else
+      added_profiles="$added_profiles, $profile"
+    fi
+  done
+
+  printf '%s' "$added_profiles"
+}
+
 main() {
   need_cmd curl
   need_cmd tar
@@ -252,6 +286,10 @@ main() {
     fi
     log "restart your shell, or run: export PATH=\"$INSTALL_DIR:\$PATH\""
     log "then run 'dr --version'"
+  fi
+  trust_profiles="$(persist_registry_trust)"
+  if [ -n "$trust_profiles" ]; then
+    log "configured trusted registry signing key in: $trust_profiles"
   fi
   log "Rust is not required to use dr; native builds may require a system C compiler"
 }

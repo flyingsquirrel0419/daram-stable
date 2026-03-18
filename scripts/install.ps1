@@ -4,6 +4,8 @@ $ErrorActionPreference = 'Stop'
 $Repo = if ($env:DR_REPO) { $env:DR_REPO } else { 'flyingsquirrel0419/daram-stable' }
 $RequestedVersion = if ($env:DR_VERSION) { $env:DR_VERSION } else { '' }
 $InstallDir = if ($env:DR_INSTALL_DIR) { $env:DR_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'Programs\Daram\bin' }
+$TrustedSigningKeyId = if ($env:DRPM_TRUSTED_SIGNING_KEY_ID) { $env:DRPM_TRUSTED_SIGNING_KEY_ID } else { 'local-dev' }
+$TrustedSigningPublicKeyPem = if ($env:DRPM_TRUSTED_SIGNING_PUBLIC_KEY_PEM) { $env:DRPM_TRUSTED_SIGNING_PUBLIC_KEY_PEM } else { "-----BEGIN PUBLIC KEY-----`nMCowBQYDK2VwAyEA6yOVMh5UY+KH9Y5Y/Tu2i93a2Lmdsn8/+odW8qCPs8w=`n-----END PUBLIC KEY-----" }
 
 function Write-Log {
     param([string]$Message)
@@ -154,6 +156,11 @@ try {
     if ($pathChanged) {
         Write-Log "Added $InstallDir to your user PATH and updated the current PowerShell session"
     }
+    [Environment]::SetEnvironmentVariable('DRPM_TRUSTED_SIGNING_KEY_ID', $TrustedSigningKeyId, 'User')
+    [Environment]::SetEnvironmentVariable('DRPM_TRUSTED_SIGNING_PUBLIC_KEY_PEM', $TrustedSigningPublicKeyPem, 'User')
+    $env:DRPM_TRUSTED_SIGNING_KEY_ID = $TrustedSigningKeyId
+    $env:DRPM_TRUSTED_SIGNING_PUBLIC_KEY_PEM = $TrustedSigningPublicKeyPem
+    Write-Log 'Configured the trusted registry signing key in your user environment and current PowerShell session'
     Write-Log "Run 'dr --version' to verify the installation"
     Write-Log 'Rust is not required to use dr; native builds may require a system C compiler'
 }

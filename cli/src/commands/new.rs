@@ -51,7 +51,7 @@ pub fn run(args: &[String]) -> i32 {
     let manifest = Manifest {
         package: PackageMeta {
             name: name.clone(),
-            version: "1.0.0".to_string(),
+            version: "1.0.2".to_string(),
             edition: "2026".to_string(),
             description: None,
             authors: Vec::new(),

@@ -13,6 +13,10 @@ use sha2::{Digest, Sha256};
 
 use crate::{dependency_cache, manifest::Dependency, terminal, workspace::find_workspace};
 
+const DEFAULT_REGISTRY_ORIGIN: &str = "https://daram.flyingsquirrel.me";
+const DEFAULT_TRUSTED_SIGNING_KEY_ID: &str = "local-dev";
+const DEFAULT_TRUSTED_SIGNING_PUBLIC_KEY_PEM: &str = "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA6yOVMh5UY+KH9Y5Y/Tu2i93a2Lmdsn8/+odW8qCPs8w=\n-----END PUBLIC KEY-----\n";
+
 #[derive(Debug, Deserialize)]
 struct ResolvedPackage {
     name: String,
@@ -27,17 +31,26 @@ struct ResolvedPackage {
 
 struct InstallOptions {
     allow_yanked: bool,
+    dev: bool,
+    package_specs: Vec<String>,
 }
 
 pub fn run(args: &[String]) -> i32 {
     let options = parse_options(args);
-    let ws = match find_workspace() {
+    let mut ws = match find_workspace() {
         Ok(w) => w,
         Err(e) => {
             terminal::error(&e.to_string());
             return 1;
         }
     };
+
+    if !options.package_specs.is_empty() {
+        if let Err(error) = add_requested_packages(&mut ws, &options.package_specs, options.dev) {
+            terminal::error(&error);
+            return 1;
+        }
+    }
 
     let deps = &ws.manifest.dependencies;
     let dev_deps = &ws.manifest.dev_dependencies;
@@ -136,7 +149,51 @@ pub fn run(args: &[String]) -> i32 {
 fn parse_options(args: &[String]) -> InstallOptions {
     InstallOptions {
         allow_yanked: args.iter().any(|arg| arg == "--allow-yanked"),
+        dev: args.iter().any(|arg| arg == "--dev"),
+        package_specs: args
+            .iter()
+            .filter(|arg| !arg.starts_with('-'))
+            .cloned()
+            .collect(),
     }
+}
+
+fn add_requested_packages(
+    ws: &mut crate::workspace::Workspace,
+    package_specs: &[String],
+    dev: bool,
+) -> Result<(), String> {
+    for spec in package_specs {
+        let (name, version) = parse_package_spec(spec)?;
+        let dep = Dependency::version_only(&version);
+        if dev {
+            ws.manifest.dev_dependencies.insert(name.clone(), dep);
+        } else {
+            ws.manifest.dependencies.insert(name.clone(), dep);
+        }
+        let kind = if dev { "dev-dependency" } else { "dependency" };
+        terminal::success(&format!("added {} `{}`", kind, spec));
+    }
+
+    ws.manifest
+        .write_to_dir(&ws.root)
+        .map_err(|e| format!("failed to update daram.toml: {}", e))?;
+    Ok(())
+}
+
+fn parse_package_spec(spec: &str) -> Result<(String, String), String> {
+    let (name, version) = match spec.split_once('@') {
+        Some((name, version)) => (name.trim().to_string(), version.trim().to_string()),
+        None => (spec.trim().to_string(), "*".to_string()),
+    };
+    if name.is_empty() {
+        return Err("package name must not be empty".to_string());
+    }
+    validate_package_coord(&name)?;
+    if version != "*" {
+        validate_version_coord(&version)?;
+    }
+    Ok((name, version))
 }
 
 fn install_dependency(
@@ -269,7 +326,7 @@ fn verify_against_lock(
 }
 
 fn verify_signature(resolved: &ResolvedPackage) -> Result<(), String> {
-    let pinned_key_id = std::env::var("DRPM_TRUSTED_SIGNING_KEY_ID").unwrap_or_default();
+    let pinned_key_id = trusted_signing_key_id(resolved);
     if !pinned_key_id.is_empty() && pinned_key_id != resolved.signing_key_id {
         return Err(format!(
             "unexpected signing key: expected {}, got {}",
@@ -282,13 +339,37 @@ fn verify_signature(resolved: &ResolvedPackage) -> Result<(), String> {
     if let Ok(command) = std::env::var("DRPM_VERIFY_COMMAND") {
         return verify_signature_with_command(&command, resolved, &payload_base64);
     }
-    if let Ok(public_key_pem) = std::env::var("DRPM_TRUSTED_SIGNING_PUBLIC_KEY_PEM") {
+    if let Some(public_key_pem) = trusted_signing_public_key_pem(resolved) {
         return verify_signature_with_openssl(&public_key_pem, resolved, &payload);
     }
     Err(
         "signature verification is required; configure DRPM_VERIFY_COMMAND or DRPM_TRUSTED_SIGNING_PUBLIC_KEY_PEM"
             .to_string(),
     )
+}
+
+fn trusted_signing_key_id(resolved: &ResolvedPackage) -> String {
+    match std::env::var("DRPM_TRUSTED_SIGNING_KEY_ID") {
+        Ok(value) if !value.trim().is_empty() => value.trim().to_string(),
+        _ if resolved.registry_url == DEFAULT_REGISTRY_ORIGIN => {
+            DEFAULT_TRUSTED_SIGNING_KEY_ID.to_string()
+        }
+        _ => String::new(),
+    }
+}
+
+fn trusted_signing_public_key_pem(resolved: &ResolvedPackage) -> Option<String> {
+    match std::env::var("DRPM_TRUSTED_SIGNING_PUBLIC_KEY_PEM") {
+        Ok(value) if !value.trim().is_empty() => Some(normalize_pem_env(&value)),
+        _ if resolved.registry_url == DEFAULT_REGISTRY_ORIGIN => {
+            Some(DEFAULT_TRUSTED_SIGNING_PUBLIC_KEY_PEM.to_string())
+        }
+        _ => None,
+    }
+}
+
+fn normalize_pem_env(value: &str) -> String {
+    value.trim().replace("\\n", "\n")
 }
 
 fn verify_signature_with_command(
@@ -635,4 +716,61 @@ fn cache_installed_package(
     )?;
     dependency_cache::write_cached_metadata(workspace_root, &metadata)?;
     Ok(metadata)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        normalize_pem_env, parse_package_spec, trusted_signing_key_id,
+        trusted_signing_public_key_pem, ResolvedPackage, DEFAULT_REGISTRY_ORIGIN,
+        DEFAULT_TRUSTED_SIGNING_KEY_ID, DEFAULT_TRUSTED_SIGNING_PUBLIC_KEY_PEM,
+    };
+
+    fn sample_resolved(registry_url: &str) -> ResolvedPackage {
+        ResolvedPackage {
+            name: "dotenv".to_string(),
+            version: "1.0.0".to_string(),
+            sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
+            archive_format: "zip".to_string(),
+            registry_url: registry_url.to_string(),
+            signature: "sig".to_string(),
+            signing_key_id: DEFAULT_TRUSTED_SIGNING_KEY_ID.to_string(),
+            yanked: false,
+        }
+    }
+
+    #[test]
+    fn parses_install_package_specs() {
+        assert_eq!(
+            parse_package_spec("dotenv@1.0.0").unwrap(),
+            ("dotenv".to_string(), "1.0.0".to_string())
+        );
+        assert_eq!(
+            parse_package_spec("dotenv").unwrap(),
+            ("dotenv".to_string(), "*".to_string())
+        );
+    }
+
+    #[test]
+    fn normalizes_pem_env_newlines() {
+        assert_eq!(normalize_pem_env("A\\nB\\nC"), "A\nB\nC".to_string());
+    }
+
+    #[test]
+    fn uses_default_registry_public_key_when_env_is_unset() {
+        unsafe {
+            std::env::remove_var("DRPM_TRUSTED_SIGNING_KEY_ID");
+            std::env::remove_var("DRPM_TRUSTED_SIGNING_PUBLIC_KEY_PEM");
+        }
+
+        let resolved = sample_resolved(DEFAULT_REGISTRY_ORIGIN);
+        assert_eq!(
+            trusted_signing_key_id(&resolved),
+            DEFAULT_TRUSTED_SIGNING_KEY_ID
+        );
+        assert_eq!(
+            trusted_signing_public_key_pem(&resolved).unwrap(),
+            DEFAULT_TRUSTED_SIGNING_PUBLIC_KEY_PEM.to_string()
+        );
+    }
 }
